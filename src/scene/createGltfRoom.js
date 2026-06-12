@@ -35,6 +35,12 @@ const CHAIR_TARGET_HEIGHT = 0.21;
 
 const FLOOR_MESH_NAME = 'group1pasted__pPlane180_FLOOR_0';
 
+// Interior wall faces, raycast-measured in final world meters (the floor
+// and the building shell both extend past the interior room — exterior
+// pavement/terrace — so no mesh bounding box gives these). Re-measure if
+// the room GLB or ROOM_SCALE changes.
+const INTERIOR = { minX: -7.06, maxX: 4.79, minZ: -4.8, maxZ: 7.03 };
+
 const loader = new GLTFLoader();
 const loadGltf = (url) =>
   new Promise((resolve, reject) => loader.load(url, resolve, undefined, reject));
@@ -97,10 +103,10 @@ export async function createGltfRoom() {
 
   const m = PLAYER.boundsMargin;
   const bounds = {
-    minX: (floorBox.min.x - floorCenter.x) * ROOM_SCALE + m,
-    maxX: (floorBox.max.x - floorCenter.x) * ROOM_SCALE - m,
-    minZ: (floorBox.min.z - floorCenter.z) * ROOM_SCALE + m,
-    maxZ: (floorBox.max.z - floorCenter.z) * ROOM_SCALE - m,
+    minX: INTERIOR.minX + m,
+    maxX: INTERIOR.maxX - m,
+    minZ: INTERIOR.minZ + m,
+    maxZ: INTERIOR.maxZ - m,
   };
 
   // Spawn near the floor's -x/+z corner, facing into the room

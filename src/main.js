@@ -6,6 +6,7 @@ import { createVideoSurface } from './scene/createVideoSurface.js';
 import { createPlayerController } from './controls/playerController.js';
 import { createKeyboardMouseInput } from './controls/keyboardMouseInput.js';
 import { createGamepadInput } from './controls/gamepadInput.js';
+import { createThemeManager } from './themes/themeManager.js';
 
 const canvas = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -21,7 +22,22 @@ async function init() {
 
   const { room, bounds, spawn } = await createGltfRoom();
   scene.add(room);
-  scene.add(createLights(bounds));
+  const lights = createLights(bounds);
+  scene.add(lights);
+
+  // --- City theme (one active; rotated monthly, toggle top right) ----------
+  const themeManager = createThemeManager({ scene, lights, bounds });
+  const themeButtons = document.querySelectorAll('#theme-toggle button');
+
+  function selectTheme(id) {
+    themeManager.setTheme(id);
+    localStorage.setItem('globe-theme', id);
+    themeButtons.forEach((b) => b.classList.toggle('active', b.dataset.theme === id));
+  }
+
+  const savedTheme = localStorage.getItem('globe-theme');
+  selectTheme(themeManager.has(savedTheme) ? savedTheme : 'tokyo');
+  themeButtons.forEach((b) => b.addEventListener('click', () => selectTheme(b.dataset.theme)));
 
   // The GLTF room has no dedicated media mesh yet; the video surface module
   // stays wired for when one is reserved (window pane or wall screen).
@@ -36,7 +52,9 @@ async function init() {
 
   if (import.meta.env.DEV) {
     // Handle for headless smoke tests and console tinkering.
-    window.__globe = { scene, camera };
+    // freecam.enabled pauses the player controller so scripted cameras
+    // (smoke tests) can position the camera without being overwritten.
+    window.__globe = { scene, camera, bounds, THREE, freecam: { enabled: false } };
   }
 
   // --- Overlay / pointer lock ----------------------------------------------
@@ -100,7 +118,8 @@ async function init() {
     };
     const mouseDelta = keyboard.consumeLookDelta();
 
-    if (started) {
+    const freecam = import.meta.env.DEV && window.__globe?.freecam.enabled;
+    if (started && !freecam) {
       player.update(dt, move, mouseDelta, pad.look);
     }
 

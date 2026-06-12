@@ -28,6 +28,7 @@ Vanilla ES modules, no framework. `src/main.js` wires everything and owns the re
 - `src/scene/createLights.js` — hemisphere fill + directional key + two point lights, positioned relative to the walkable `bounds` so it works for any room.
 - `src/scene/createVideoSurface.js` — media-surface manager. Gradient CanvasTexture fallback by default; `setSource(url)` swaps in a muted/looping/playsinline VideoTexture and falls back gracefully if autoplay is blocked. The GLTF room has no media mesh reserved yet, so it's wired with an empty mesh list in main.js.
 - `src/controls/playerController.js` — first-person camera: yaw/pitch (YXZ euler, pitch clamped), ground-plane movement, position clamped to the walkable rect `{minX,maxX,minZ,maxZ}` passed in. Owns the camera; nothing else moves it.
+- `src/themes/` — city theme system (one active; rotated monthly, toggled top right). `themes.js` defines each theme: a `lighting` block applied to the existing lights/background and a `buildDecor()` returning a procedural decor group (canvas-texture signs, neon tubes, lanterns, bulb strings from `decor.js`). `themeManager.js` swaps decor (with full geometry/material/texture disposal) and retunes lights. The core shop — room model, furniture, player — is never touched by themes. Adding a city = one entry in `THEMES` + a button in index.html. Choice persists in localStorage (`globe-theme`).
 - `src/controls/keyboardMouseInput.js` — WASD + pointer-lock mouse deltas.
 - `src/controls/gamepadInput.js` — standard-mapping gamepad polling, radial dead zones. Left stick move, right stick look.
 
@@ -37,7 +38,8 @@ Vanilla ES modules, no framework. `src/main.js` wires everything and owns the re
 - Mouse look is an accumulated per-frame pixel delta (`consumeLookDelta`); gamepad look is a rate scaled by dt. Don't mix the two models up.
 - Units are meters; player eye height 1.6 m, walk speed ~3 m/s, frame-rate independent via clamped `clock.getDelta()`.
 - All meshes and groups are named — keep that up for future selection/animation.
-- Walkable `bounds` and `spawn` are derived from the loaded room's floor mesh at runtime, not hardcoded — preserve that when touching createGltfRoom.
+- The walkable rect is the raycast-measured interior `INTERIOR` in createGltfRoom.js (x -7.06..4.79, z -4.8..7.03) — the floor and building shell extend past the interior room (exterior terrace), so mesh bounding boxes give wrong walls. Theme decor mounts on measured wall faces in themes.js (~0.1 m proud of the slatted walls to avoid z-fighting). Re-measure both if the room GLB or its scale changes.
+- Headless verification gotcha: the player controller re-applies yaw/pitch and clamps position every frame, so scripted `camera.lookAt()` is overwritten. In dev, set `window.__globe.freecam.enabled = true` first (exposed from main.js along with scene/camera/bounds/THREE).
 - The room GLB is a messy Sketchfab/Maya export (~1,100 nodes, 30 merged meshes, identified by `_<material>_0` name suffixes). Don't edit the GLB files; do model surgery at runtime in createGltfRoom.js.
 - Keep it dependency-light: three + vite only. No framework, no physics engine (collision is a bounds clamp by design for v1).
 
