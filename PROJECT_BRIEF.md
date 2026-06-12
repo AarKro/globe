@@ -21,6 +21,7 @@ The scene represents one stylized café room that the user can **walk through in
 
 ### Constraints
 - Dependency-light, framework-free, static-hostable. No backend.
+- The site must run on **GitHub Pages** — free static hosting tied to the repo is the deploy target.
 - Iteration speed beats visual fidelity for this phase.
 
 ---
@@ -96,6 +97,14 @@ Keyboard/mouse and gamepad must feed the **same** player controller through a sm
 - the controller consumes a normalized intent: a 2D move vector and a 2D look vector
 - keyboard/mouse and gamepad each produce that intent; neither is special-cased inside movement code
 - this keeps future inputs (touch, on-screen joystick) cheap to add
+
+### Hosting and deployment
+The site must be deployable to **GitHub Pages**:
+- the production build is fully static (HTML/CSS/JS + assets), no server-side code — already guaranteed by the stack
+- Vite's `base` option must be set to the repo path (e.g. `/globe/`) so asset URLs resolve under `https://<user>.github.io/<repo>/`
+- all asset references (models, textures, videos) must use relative or base-aware paths, never absolute root paths
+- deploy via a simple GitHub Actions workflow that builds and publishes `dist/` to Pages (or an equivalent documented one-command deploy)
+- video sources must either live in the repo or be served from a CORS-friendly host, since Pages serves over HTTPS
 
 ### Repository hygiene
 - A rudimentary **`.gitignore` is required** from the first commit, covering at minimum: `node_modules/`, `dist/`, `.DS_Store`, editor/IDE folders, and local env files (`.env*`).
@@ -241,6 +250,7 @@ Optional: keep an orbit/inspect camera as a debug mode behind a key toggle, but 
 - An Xbox controller works interchangeably: left stick moves, right stick looks, with sensible dead zones.
 - At least one surface is prepared for or already using a video texture, with graceful autoplay fallback.
 - A `.gitignore` exists covering node_modules, build output, and OS/editor junk.
+- The production build deploys to GitHub Pages and runs there with all assets loading correctly.
 - The scene structure is clean enough that a GLTF room can replace the placeholder room later.
 - The project remains simple enough for another agent or developer to extend quickly.
 
@@ -257,4 +267,5 @@ Optional: keep an orbit/inspect camera as a debug mode behind a key toggle, but 
 - [ ] reserve or implement a video-textured window or wall surface with fallback
 - [ ] add the start/instructions overlay with controls hints
 - [ ] organize code so GLTF support can be added later
-- [ ] verify the prototype runs cleanly in the browser with both input methods
+- [ ] configure the Vite `base` path and a GitHub Pages deploy (Actions workflow or documented command)
+- [ ] verify the prototype runs cleanly in the browser with both input methods, locally and on GitHub Pages

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Globe Café</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☕</text></svg>" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="app"></canvas>
+
+    <div id="overlay">
+      <div id="loading" class="card">Loading…</div>
+
+      <div id="start" class="card hidden">
+        <h1>Globe Café</h1>
+        <p>Step inside and look around.</p>
+        <button id="enter">Click to walk around</button>
+        <ul class="controls-hint">
+          <li><b>W A S D</b> move &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Esc</b> release mouse</li>
+          <li><b>Left stick</b> move &nbsp;·&nbsp; <b>Right stick</b> look (controller)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="hint" class="hidden">Esc to release mouse</div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

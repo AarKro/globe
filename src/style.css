@@ -1,0 +1,105 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a120c;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #f3e9dc;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 12, 6, 0.55);
+  transition: opacity 0.3s ease;
+}
+
+#overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card {
+  text-align: center;
+  padding: 2.5rem 3rem;
+  background: rgba(26, 18, 12, 0.85);
+  border: 1px solid rgba(243, 233, 220, 0.2);
+  border-radius: 8px;
+  max-width: 26rem;
+}
+
+.card.hidden {
+  display: none;
+}
+
+.card h1 {
+  font-size: 2rem;
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.5rem;
+}
+
+.card p {
+  opacity: 0.8;
+  margin-bottom: 1.5rem;
+}
+
+#enter {
+  font: inherit;
+  font-size: 1rem;
+  color: #1a120c;
+  background: #e8b86d;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+}
+
+#enter:hover {
+  background: #f0c87e;
+}
+
+.controls-hint {
+  list-style: none;
+  margin-top: 1.5rem;
+  font-size: 0.8rem;
+  opacity: 0.65;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.controls-hint li {
+  margin-top: 0.4rem;
+}
+
+#hint {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-family: ui-monospace, Menlo, monospace;
+  opacity: 0.45;
+  transition: opacity 0.3s ease;
+}
+
+#hint.hidden {
+  opacity: 0;
+}
