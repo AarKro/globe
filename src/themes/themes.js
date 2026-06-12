@@ -14,12 +14,12 @@ import {
 // Adding next month's city = one more entry here.
 
 // Mount points measured against the loaded room model (world meters,
-// interior x -7.06..4.79, z -4.8..7.03, ceiling ≈ 2.35). The back (+z)
-// wall is clear left of the counter (x < 0); the left (-x) wall has the
-// stool bar below y ≈ 1. Decor sits ~0.1 m proud of the slatted walls to
-// avoid z-fighting. Re-measure if the room GLB changes.
-const BACK_WALL_Z = 6.93;
-const LEFT_WALL_X = -6.94;
+// interior x -7.19..4.79, z -6.0..6.0, walls ≈ 2.35 high, no ceiling
+// mesh). The back (+z) wall is glass (window) left of the counter, solid
+// near x 0. Decor sits ~0.1 m proud of the walls to avoid z-fighting.
+// Re-measure if the room GLB changes.
+const BACK_WALL_Z = 5.88;
+const LEFT_WALL_X = -7.05;
 
 const JP_FONT = '"Hiragino Sans", "Yu Gothic", sans-serif';
 const NY_FONT = 'Futura, "Helvetica Neue", Arial, sans-serif';

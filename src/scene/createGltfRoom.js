@@ -2,20 +2,25 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAYER } from './constants.js';
 
-const ROOM_URL = new URL('../assets/models/coffeshop_room.glb', import.meta.url).href;
+const ROOM_URL = new URL('../assets/models/empty_coffeeroom.glb', import.meta.url).href;
 const CHAIR_URL = new URL('../assets/models/cover_chair.glb', import.meta.url).href;
 
 // The source model is ~2.9 units across with a 0.48-unit ceiling; this
 // scale brings it to walkable meters (ceiling ≈ 2.4 m).
 const ROOM_SCALE = 5;
 
-// The original chairs are merged into two meshes by material, so there are
-// no per-chair nodes to swap. These are the merged meshes to strip:
-const CHAIR_MESH_NAMES = ['pCube427_coffeechair_0', 'pCylinder383_coffeechair1_0'];
+// empty_coffeeroom.glb is the same export as the original coffeshop_room
+// with all seating/tables already removed, so there is nothing to strip.
+// (The original's merged chair meshes were 'pCube427_coffeechair_0' and
+// 'pCylinder383_coffeechair1_0' — keep the mechanism in case a future
+// room ships furniture again.)
+const CHAIR_MESH_NAMES = [];
 
-// ...and these are the per-chair footprints recovered by clustering that
-// merged geometry offline (model-space coordinates, pre-scaling).
-// `face` is the point the chair is turned toward.
+// Per-chair footprints recovered by clustering the original room's merged
+// chair geometry offline (model-space coordinates, pre-scaling). The
+// coordinate system is unchanged in the empty room, so the spots remain
+// sensible seating positions. `face` is the point the chair is turned
+// toward.
 const CHAIR_PLACEMENTS = [
   // box-style coffee chairs
   { x: 1.62, z: 0.29, face: { x: 1.62, z: 0.54 } },
@@ -38,8 +43,9 @@ const FLOOR_MESH_NAME = 'group1pasted__pPlane180_FLOOR_0';
 // Interior wall faces, raycast-measured in final world meters (the floor
 // and the building shell both extend past the interior room — exterior
 // pavement/terrace — so no mesh bounding box gives these). Re-measure if
-// the room GLB or ROOM_SCALE changes.
-const INTERIOR = { minX: -7.06, maxX: 4.79, minZ: -4.8, maxZ: 7.03 };
+// the room GLB or ROOM_SCALE changes. Note: the empty room has no ceiling
+// mesh and its back wall is glass left of the counter.
+const INTERIOR = { minX: -7.19, maxX: 4.79, minZ: -6.0, maxZ: 6.0 };
 
 const loader = new GLTFLoader();
 const loadGltf = (url) =>
