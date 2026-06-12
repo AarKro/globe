@@ -21,12 +21,13 @@ Pushes to `main` deploy to GitHub Pages via `.github/workflows/deploy.yml` (buil
 
 Vanilla ES modules, no framework. `src/main.js` wires everything and owns the render loop and overlay/pointer-lock state.
 
-- `src/scene/constants.js` — ALL tunables: room dimensions, eye height, walk speed, look sensitivities, FOV, bounds margin. Tune feel here, not inline.
+- `src/scene/constants.js` — tunables: placeholder room dimensions, eye height, walk speed, look sensitivities, FOV, bounds margin. Tune feel here, not inline.
 - `src/scene/createScene.js` — scene, camera, renderer, resize handling. Pixel ratio clamped to 2.
-- `src/scene/createRoom.js` — placeholder room geometry in named groups (`shell`, `windows`, `furniture`, `decor`) under one root group named `room`. Returns `{ room, mediaSurfaces }`. The root group is designed to be replaced 1:1 by a GLTF room later — keep the origin/orientation contract stable.
-- `src/scene/createLights.js` — hemisphere fill + directional key + two lamp point lights. Lamp positions must match the bulb meshes in createRoom.
-- `src/scene/createVideoSurface.js` — manages the window panes (`mediaSurfaces`). Gradient CanvasTexture fallback by default; `setSource(url)` swaps in a muted/looping/playsinline VideoTexture and falls back gracefully if autoplay is blocked.
-- `src/controls/playerController.js` — first-person camera: yaw/pitch (YXZ euler, pitch clamped), ground-plane movement, position clamped to room bounds. Owns the camera; nothing else moves it.
+- `src/scene/createGltfRoom.js` — **the active room**: loads `coffeshop_room.glb`, recenters it (floor center → origin, floor top → y=0) and scales it ×5 to meters, strips the original merged chair meshes, and places `cover_chair.glb` clones at baked per-chair placements. Returns `{ room, bounds, spawn }`. The source GLB has chairs merged into two meshes by material (no per-chair nodes); the placement table in this file was recovered by clustering that geometry offline — if the room model is re-exported, re-derive it.
+- `src/scene/createRoom.js` — the original placeholder room (named groups under a `room` root). Currently unused but kept as a dependency-free fallback; returns `{ room, mediaSurfaces }`.
+- `src/scene/createLights.js` — hemisphere fill + directional key + two point lights, positioned relative to the walkable `bounds` so it works for any room.
+- `src/scene/createVideoSurface.js` — media-surface manager. Gradient CanvasTexture fallback by default; `setSource(url)` swaps in a muted/looping/playsinline VideoTexture and falls back gracefully if autoplay is blocked. The GLTF room has no media mesh reserved yet, so it's wired with an empty mesh list in main.js.
+- `src/controls/playerController.js` — first-person camera: yaw/pitch (YXZ euler, pitch clamped), ground-plane movement, position clamped to the walkable rect `{minX,maxX,minZ,maxZ}` passed in. Owns the camera; nothing else moves it.
 - `src/controls/keyboardMouseInput.js` — WASD + pointer-lock mouse deltas.
 - `src/controls/gamepadInput.js` — standard-mapping gamepad polling, radial dead zones. Left stick move, right stick look.
 
@@ -36,8 +37,8 @@ Vanilla ES modules, no framework. `src/main.js` wires everything and owns the re
 - Mouse look is an accumulated per-frame pixel delta (`consumeLookDelta`); gamepad look is a rate scaled by dt. Don't mix the two models up.
 - Units are meters; player eye height 1.6 m, walk speed ~3 m/s, frame-rate independent via clamped `clock.getDelta()`.
 - All meshes and groups are named — keep that up for future selection/animation.
-- Materials are assigned per mesh and meant to be swappable; shared material constants live at the top of createRoom.js.
-- Coordinate layout: counter on the back wall (-z), window/video wall on -x, player spawns near +z facing the counter (yaw 0 = facing -z).
+- Walkable `bounds` and `spawn` are derived from the loaded room's floor mesh at runtime, not hardcoded — preserve that when touching createGltfRoom.
+- The room GLB is a messy Sketchfab/Maya export (~1,100 nodes, 30 merged meshes, identified by `_<material>_0` name suffixes). Don't edit the GLB files; do model surgery at runtime in createGltfRoom.js.
 - Keep it dependency-light: three + vite only. No framework, no physics engine (collision is a bounds clamp by design for v1).
 
 ## Non-goals (v1)

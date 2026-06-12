@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { ROOM, PLAYER, LOOK } from '../scene/constants.js';
+import { PLAYER, LOOK } from '../scene/constants.js';
 
 // First-person walk controller. Owns the camera's position and orientation;
 // all input arrives as normalized intent (move vector + look delta/rate), so
 // keyboard/mouse and gamepad are interchangeable without a mode switch.
-export function createPlayerController(camera) {
-  let yaw = PLAYER.spawnYaw;
+// `bounds` is the walkable rect {minX, maxX, minZ, maxZ}; `spawn` is
+// {x, z, yaw} with yaw 0 facing -z.
+export function createPlayerController(camera, bounds, spawn) {
+  let yaw = spawn.yaw;
   let pitch = 0;
 
-  camera.position.set(PLAYER.spawn.x, PLAYER.eyeHeight, PLAYER.spawn.z);
+  camera.position.set(spawn.x, PLAYER.eyeHeight, spawn.z);
 
-  const boundsX = ROOM.width / 2 - PLAYER.boundsMargin;
-  const boundsZ = ROOM.depth / 2 - PLAYER.boundsMargin;
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
   function applyOrientation() {
@@ -39,8 +39,8 @@ export function createPlayerController(camera) {
       const dx = (move.x * cos - move.y * sin) * step;
       const dz = (-move.x * sin - move.y * cos) * step;
 
-      camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, -boundsX, boundsX);
-      camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -boundsZ, boundsZ);
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, bounds.minX, bounds.maxX);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, bounds.minZ, bounds.maxZ);
       camera.position.y = PLAYER.eyeHeight;
     },
   };
