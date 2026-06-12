@@ -1,213 +1,260 @@
-# Café 3D Room Project Brief
+# Globe Café — 3D Walkable Room — Project Brief
 
 ## Overview
-Build a small, implementation-ready prototype of a café interior in 3D using Three.js.
+Build a small, implementation-ready prototype of the Globe Café interior in 3D using Three.js.
 
-The scene should represent one stylized room that can later evolve into a more detailed café concept. The codebase must remain intentionally small, easy to read, and easy to extend.
+The scene represents one stylized café room that the user can **walk through in first person**. It will later evolve into a more detailed café concept with authored assets. The codebase must remain intentionally small, easy to read, and easy to extend.
 
-## Product goal
-Create a browser-based room preview that lets us:
-- inspect a simple 3D café interior
-- replace placeholder geometry with a GLTF room later
-- map video textures onto wall or window surfaces
-- iterate on lighting, materials, and layout without changing the overall architecture
+---
 
-## Recommended stack
-Use a vanilla front end with a lightweight build setup:
+## 1. Business intent
 
-- HTML for the entry point
-- CSS for page layout and loading states
-- JavaScript with ES modules
-- Three.js as the 3D engine
-- OrbitControls for camera inspection
-- GLTFLoader for future room imports
-- VideoTexture for animated wall or window surfaces
+### Why this exists
+- Create a browser-based, explorable 3D version of the Globe Café concept — a digital space that communicates the café's atmosphere before (and beyond) any physical or photographic representation.
+- Validate the *feel* of the space — proportions, lighting, warmth, ambience — cheaply, using placeholder geometry, before investing in authored 3D assets (GLTF room, furniture, signage).
+- Serve as the foundation for future experience layers: animated window views, wall screens, ambient audio, interactive hotspots, and possibly menu or event content embedded in the scene.
 
-Recommended project setup:
-- Vite with the vanilla template, or an equivalent minimal dev server
-- no framework
-- no state management library
-- no UI library unless it is required later
+### Success criteria (business level)
+- A visitor opens a URL and is "inside" the café within seconds, no install, no instructions beyond a short overlay.
+- The prototype is convincing enough to decide what to invest in next (real model, video footage, branding pass).
+- The codebase stays small enough that one developer or agent can extend it in a single session.
 
-This keeps the source code as simple HTML/CSS/JS while still giving us a reliable module-based workflow.
+### Constraints
+- Dependency-light, framework-free, static-hostable. No backend.
+- Iteration speed beats visual fidelity for this phase.
 
-## Core requirements
-The first implementation must include:
+---
 
-### Scene
-- A Three.js scene with a perspective camera
-- WebGL renderer with correct resize handling
-- Pixel ratio clamped for performance, for example up to 2
-- A room constructed from placeholder geometry
-- At least one surface reserved for a future video texture
-- Basic lighting that makes the room readable and visually pleasant
+## 2. User context
 
-### Interaction
-- Orbit-style camera controls
-- Damping enabled for smoother movement
-- Reasonable min and max zoom distance so the camera stays inside the room
-- Optional autorotation only if it does not hurt usability
+### Who uses it
+- **Visitors / stakeholders**: open the link in a desktop browser, walk around for 1–3 minutes, form an impression of the space. No 3D or gaming expertise assumed.
+- **The project owner / designers**: iterate on layout, lighting, and materials between sessions; need predictable structure and tunable constants.
+- **Future developers / agents**: must be able to replace placeholders (geometry → GLTF, image → video) without rearchitecting.
 
-### Layout
-- A simple full-page canvas
-- Optional overlay for loading or short instructions
-- Responsive behavior on desktop and mobile viewport sizes
+### Usage assumptions
+- Primary: desktop browser with keyboard + mouse.
+- Secondary: desktop browser with an Xbox-style gamepad connected (standard Gamepad API mapping).
+- Mobile: the page must load and render responsively, but full walk controls on touch are **not** required for v1 (a graceful fallback such as a fixed or orbiting view is acceptable).
+- Sessions are short; the scene must be readable and pleasant immediately on load.
 
-## Scene specification
-The room should be built from simple primitives at first.
+### Accessibility / comfort
+- Show a brief controls hint on load (keyboard/mouse and gamepad).
+- Mouse look only activates via Pointer Lock after a deliberate click, with an obvious way out (Esc).
+- Movement speed and look sensitivity defined as named constants so they are easy to tune; avoid nausea-inducing defaults (no head bob in v1, moderate FOV ~70–75°).
 
-### Geometry to include
-- floor plane or box
-- ceiling plane or box
-- four walls
-- window openings or wall panels
-- a counter or bar element
-- tables or seating blocks
-- a few décor placeholders such as shelves, lamps, or signs
+---
+
+## 3. Information architecture
+
+### Page structure
+A single full-page canvas application:
+- **Canvas layer**: the 3D scene fills the viewport.
+- **Overlay layer (HTML/CSS)**:
+  - loading state while the scene initializes
+  - a start/instructions card: "Click to walk around — WASD + mouse, or use a controller"
+  - a minimal persistent hint (e.g. "Esc to release mouse"), nothing else competing with the scene
+- No navigation, no routes, no menus in v1. The scene *is* the content.
+
+### Scene content structure (what the user finds in the space)
+The room reads as a believable café with distinct zones, organized as named groups in the scene graph:
+- **Entry zone** — where the camera starts, with a clear view across the room
+- **Counter / bar** — the focal anchor of the room
+- **Seating area** — tables and seating blocks
+- **Window wall** — window panes reserved for animated (video) exterior views
+- **Décor layer** — shelves, lamps, signs; placeholder volumes for future props
 
 ### Spatial assumptions
-- Use meters or meter-like units consistently
-- Keep the room proportionate and believable
-- Make the origin and camera setup predictable so later GLTF replacement is straightforward
-- Position the camera so the full room can be inspected immediately on load
+- Meters (or meter-like units) used consistently.
+- Origin and orientation predictable so a future GLTF room can replace the placeholder root group 1:1.
+- Player spawn position and facing direction defined as constants near the room dimensions.
 
-### Materials
-- Use simple, readable materials first
-- Prefer MeshStandardMaterial or MeshPhysicalMaterial for future lighting realism
-- Keep material assignment modular so it is easy to replace per mesh later
-- Reserve at least one mesh for a video-driven material
+---
 
-## Lighting spec
-Use lighting that is simple but believable.
+## 4. System architecture
 
-Minimum lighting setup:
-- one ambient or hemisphere light for fill
-- one directional light or spot light for key illumination
-- optional area-like fill through additional soft lights or emissive elements
+### Stack
+- HTML entry point, CSS for layout/overlay, JavaScript with ES modules
+- **Three.js** as the 3D engine
+- **GLTFLoader** prepared for future room imports
+- **VideoTexture** for animated wall/window surfaces
+- **Pointer Lock** (e.g. `PointerLockControls` or equivalent) for first-person mouse look
+- **Gamepad API** for Xbox controller support
+- **Vite** (vanilla template) or an equivalent minimal dev server
+- No framework, no state management library, no UI library
 
-If possible, make the lighting feel like a warm café interior rather than a neutral test scene.
+### Runtime architecture
+- `THREE.Scene` with a warm, subtle background tone
+- `THREE.PerspectiveCamera` at standing eye height (~1.6 m), FOV ~70–75°
+- `THREE.WebGLRenderer({ antialias: true })`, pixel ratio clamped (e.g. max 2)
+- Resize handling tied to `window.innerWidth/innerHeight`
+- A single render loop that each frame: polls input (keyboard state + gamepad state), updates the player controller with delta time, updates video textures, renders
+- A room root `Group` that can later be swapped for a GLTF root node; named meshes/groups for floor, walls, furniture, media surfaces
 
-## Video surface spec
-We want the scene to support animated wall or window surfaces.
+### Input abstraction
+Keyboard/mouse and gamepad must feed the **same** player controller through a small input layer:
+- the controller consumes a normalized intent: a 2D move vector and a 2D look vector
+- keyboard/mouse and gamepad each produce that intent; neither is special-cased inside movement code
+- this keeps future inputs (touch, on-screen joystick) cheap to add
 
-Implementation requirements:
-- create one dedicated mesh or material slot for a video texture
-- use HTML video elements as the source for the texture
-- set the texture to update continuously while the video plays
-- ensure the video is muted and plays inline where browser policies require it
-- design the API so the video source can be swapped without rewriting the room setup
+### Repository hygiene
+- A rudimentary **`.gitignore` is required** from the first commit, covering at minimum: `node_modules/`, `dist/`, `.DS_Store`, editor/IDE folders, and local env files (`.env*`).
 
-Preferred usage:
-- window panes with animated exterior footage
-- wall-mounted screens
-- backlit glass panels
+### Suggested file structure
+- `index.html`
+- `.gitignore`
+- `src/`
+  - `main.js`
+  - `style.css`
+  - `scene/`
+    - `createScene.js`
+    - `createRoom.js`
+    - `createLights.js`
+    - `createVideoSurface.js`
+  - `controls/`
+    - `playerController.js` — movement, look, collision/bounds
+    - `keyboardMouseInput.js` — WASD + pointer-lock mouse
+    - `gamepadInput.js` — Gamepad API polling, dead zones
+  - `assets/`
+    - `models/`
+    - `textures/`
+    - `videos/`
 
-If browser autoplay restrictions block playback, the app should fail gracefully and keep the rest of the room visible.
+If kept flatter, preserve the same separation of concerns: scene setup, room construction, lighting, player controls, input, video texture handling.
+
+---
+
+## 5. Style and brand
+
+- The space should feel like a **warm, inviting café interior**, not a neutral tech demo — stylized and cozy rather than photoreal.
+- Palette: warm woods, cream/plaster walls, amber light; avoid sterile grays.
+- Lighting (minimum):
+  - one ambient or hemisphere light for fill
+  - one directional or spot light for key illumination
+  - optional soft fills or emissive elements (lamps, backlit panels) to add warmth
+- Materials: `MeshStandardMaterial` / `MeshPhysicalMaterial`, assigned modularly per mesh so they're easy to replace; simple and readable first.
+- Animated surfaces are part of the brand language: window panes with exterior footage, wall-mounted screens, backlit glass panels — the room should feel alive, not static.
+- Overlay UI: minimal, unobtrusive, typography-led; it frames the scene rather than competing with it. (A proper brand/typography pass is future work; v1 just needs to be clean.)
+
+---
+
+## 6. Functional modules
+
+### 6.1 Scene bootstrap
+- Scene, camera, renderer, resize handling, render loop with delta time.
+- Pixel ratio clamped for performance.
+
+### 6.2 Room builder
+- Room constructed from placeholder primitives: floor, ceiling, four walls, window openings/panels, counter/bar, tables/seating blocks, décor placeholders.
+- Organized in named groups (`floor`, `walls`, `furniture`, `media`), under one replaceable root group.
+- Helper constants for room width, depth, height.
+
+### 6.3 Lighting
+- Warm café lighting per the style spec; tunable in one module.
+
+### 6.4 Player controller (first-person walk-through) — core requirement
+The user must be able to **walk through the scene** in first person.
+
+Keyboard + mouse:
+- `W/A/S/D` to move (forward/left/back/right relative to facing direction)
+- Mouse to look, via Pointer Lock (click to engage, Esc to release)
+- Movement on the ground plane only; vertical look clamped (no flipping past straight up/down)
+
+Xbox controller (standard Gamepad API mapping):
+- **Left stick** moves the player
+- **Right stick** looks around
+- Radial dead zones on both sticks; analog magnitude maps to movement speed
+- Hot-plug friendly: detect connect/disconnect via `gamepadconnected` events and poll `navigator.getGamepads()` each frame
+- Keyboard/mouse and gamepad work interchangeably without a mode switch
+
+Movement feel:
+- Walking speed roughly 2–4 m/s, frame-rate independent (delta time)
+- Simple collision: keep the player inside the room (bounds clamp is acceptable for v1; per-furniture collision is optional)
+- Eye height constant (~1.6 m); no jumping, no physics engine
+
+Optional: keep an orbit/inspect camera as a debug mode behind a key toggle, but first-person walk is the default experience.
+
+### 6.5 Input layer
+- `keyboardMouseInput` and `gamepadInput` modules, each producing the normalized move/look intent consumed by the player controller (see System architecture).
+
+### 6.6 Video surface
+- At least one dedicated mesh/material slot for a video texture (window pane or wall screen preferred).
+- HTML `<video>` element as source: muted, `playsinline`, looping; texture updates continuously while playing.
+- API designed so the video source can be swapped without rewriting room setup.
+- If autoplay is blocked, fail gracefully (static fallback material) and keep the rest of the room working.
+- `crossOrigin` only if the source requires it; `LinearFilter`-style safe defaults; intentional wrapping/aspect so footage doesn't distort.
+
+### 6.7 UI overlay
+- Loading state, start/instructions card with controls hints (keyboard and gamepad), pointer-lock engage/release handling.
+
+### 6.8 Asset loaders (prepared, not required for v1)
+- GLTFLoader wired or trivially wireable; `assets/models`, `assets/textures`, `assets/videos` directories exist even if empty.
+
+---
 
 ## Asset strategy
-Start with placeholders only.
+- **v1**: generated placeholder geometry only; no external model dependency.
+- **Future**: a GLTF café room, image textures (wood, plaster, signage), video files for windows/screens.
 
-Current assets:
-- generated geometry only
-- no external model dependency required for the first version
-
-Future assets:
-- a GLTF room model
-- image textures for walls, wood, concrete, or signage
-- video files for window and wall surfaces
-
-Asset directories should be prepared now even if they are empty.
-
-## Suggested file structure
-- index.html
-- src/
-  - main.js
-  - style.css
-  - scene/
-    - createScene.js
-    - createRoom.js
-    - createLights.js
-    - createVideoSurface.js
-  - assets/
-    - models/
-    - textures/
-    - videos/
-
-If the project is kept flatter than this, the code should still follow the same separation of concerns:
-- scene setup
-- room construction
-- lighting
-- controls
-- video texture handling
+---
 
 ## Implementation notes for the agent
-When creating the project, follow these rules:
-
 1. Keep the app dependency-light and framework-free.
-2. Use Three.js modules instead of a bundled demo scaffold.
+2. Use Three.js modules, not a bundled demo scaffold.
 3. Build the room from placeholder geometry first.
-4. Keep the scene graph organized with named groups for floor, walls, furniture, and media surfaces.
-5. Make the camera and controls easy to tune.
-6. Isolate video texture logic so a future GLTF room can reuse it.
-7. Keep the code readable, with small functions and explicit naming.
-8. Add comments only where they clarify non-obvious 3D or video details.
+4. Keep the scene graph organized with named groups; one replaceable room root.
+5. Route all movement through the player controller; never read input devices inside movement code.
+6. Make speeds, sensitivities, dead zones, eye height, and room dimensions named constants.
+7. Isolate video texture logic so a future GLTF room can reuse it.
+8. Keep code readable: small functions, explicit naming; comments only where 3D, input, or video behavior is non-obvious.
+9. Add the `.gitignore` before the first commit.
 
-## Technical implementation guidance
-The implementation should ideally include:
+---
 
-- `THREE.Scene()` with a neutral background color or subtle environment tone
-- `THREE.PerspectiveCamera()` placed outside the room and aimed toward the center
-- `THREE.WebGLRenderer({ antialias: true, alpha: false })`
-- resize handling tied to `window.innerWidth` and `window.innerHeight`
-- `OrbitControls` with damping
-- a room root `Group` that can later be replaced with a GLTF root node
-- named meshes for easier future selection and animation
-- optional helper constants for room width, depth, and height
-
-Video-specific details:
-- create the video element in JavaScript or reference it from the DOM
-- set `crossOrigin` only if the source requires it
-- call `texture.needsUpdate = true` while the video plays
-- use `LinearFilter` or equivalent safe defaults if needed for performance
-- set wrapping and aspect ratio intentionally so the video does not distort unexpectedly
-
-## Non-goals for the first version
-Do not add these yet unless they are required to make the prototype work:
-- physics simulation
-- character controls
+## Non-goals for v1
+- physics simulation (a bounds clamp is not physics)
+- jumping, crouching, head bob
+- touch/mobile walk controls (graceful static/orbit fallback only)
 - complex postprocessing pipeline
 - lighting bake workflow
-- material editor UI
-- full scene graph editor
+- material editor or scene graph editor UI
 - advanced animation system
+- multiplayer/avatars, audio (future ambience work)
+
+---
 
 ## Future roadmap
-After the first version, the project can expand into:
-- importing a real café room with GLTFLoader
-- replacing placeholders with authored furniture and props
-- adding multiple video windows or digital signs
-- improving light response with better materials and environment maps
-- adding interactive hotspots or camera bookmarks
-- adding ambience with audio, reflections, and subtle postprocessing
+- Import a real café room with GLTFLoader; replace placeholders with authored furniture and props.
+- Multiple video windows and digital signs.
+- Better materials, environment maps, subtle postprocessing.
+- Interactive hotspots (menu, events) and camera bookmarks.
+- Ambient audio and reflections.
+- Touch controls for mobile walk-through.
+- Brand/typography pass on the overlay UI.
+
+---
 
 ## Definition of done
-The project is ready when all of the following are true:
-
-- the page loads in the browser without manual setup beyond the documented dev command
-- the user sees a stylized café room in 3D
-- the room is made from placeholder geometry, not a final model
-- the camera can orbit and zoom within sensible limits
-- at least one surface is prepared for or already using a video texture
-- the scene structure is clean enough that a GLTF room can replace the placeholder room later
-- the project remains simple enough for another agent or developer to extend quickly
+- The page loads in the browser with no setup beyond the documented dev command.
+- The user sees a stylized, warmly lit café room built from placeholder geometry.
+- The user can walk through the room in first person with WASD + mouse (pointer lock), staying inside the room bounds.
+- An Xbox controller works interchangeably: left stick moves, right stick looks, with sensible dead zones.
+- At least one surface is prepared for or already using a video texture, with graceful autoplay fallback.
+- A `.gitignore` exists covering node_modules, build output, and OS/editor junk.
+- The scene structure is clean enough that a GLTF room can replace the placeholder room later.
+- The project remains simple enough for another agent or developer to extend quickly.
 
 ## Implementation checklist
-- [ ] set up the minimal build and dev workflow
-- [ ] create the HTML entry point and full-page canvas layout
-- [ ] build the Three.js scene and renderer
-- [ ] add orbit controls and resize handling
-- [ ] create the room from placeholder geometry
-- [ ] add warm, readable lighting
-- [ ] reserve or implement a video-textured wall or window surface
+- [ ] set up the minimal build and dev workflow (Vite vanilla or equivalent)
+- [ ] add a rudimentary `.gitignore`
+- [ ] create the HTML entry point, full-page canvas, and overlay layer
+- [ ] build the Three.js scene, renderer, resize handling, and delta-time loop
+- [ ] create the room from placeholder geometry in named groups
+- [ ] add warm, readable café lighting
+- [ ] implement the player controller (first-person, eye height, bounds clamp)
+- [ ] implement keyboard/mouse input with pointer lock
+- [ ] implement gamepad input (left stick move, right stick look, dead zones, hot-plug)
+- [ ] reserve or implement a video-textured window or wall surface with fallback
+- [ ] add the start/instructions overlay with controls hints
 - [ ] organize code so GLTF support can be added later
-- [ ] verify the prototype runs cleanly in the browser
+- [ ] verify the prototype runs cleanly in the browser with both input methods
