@@ -19,6 +19,7 @@ const STREET = { minX: -streetHalf, maxX: streetHalf, minZ: facadeZ + 0.6, maxZ:
 export function createEntranceSequence({ entrance, audio, camera, player, liveBounds, cafeBounds }) {
   let place = 'street';
   let pendingClose = false; // awaiting the entry door to shut behind us
+  let flash = 0; // 0..1 warm-bloom overlay that masks the teleport cut
   Object.assign(liveBounds, STREET);
 
   // Pose to drop into when stepping from the café back into the tunnel: at the
@@ -42,6 +43,7 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
   function toTunnelFromCafe() {
     place = 'tunnel';
     pendingClose = false;
+    flash = 1; // white-out covers the cut
     player.teleport(tunnelReturnPose);
     Object.assign(liveBounds, { minX: -doorwayHalf, maxX: doorwayHalf, minZ: exitZ + 0.6, maxZ: facadeZ - 0.5 });
     audio.setPlace('tunnel');
@@ -50,6 +52,7 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
   function toCafe() {
     place = 'cafe';
     pendingClose = false;
+    flash = 1; // white-out covers the cut
     player.teleport(entrance.arrivalPose);
     Object.assign(liveBounds, cafeBounds);
     audio.setPlace('cafe');
@@ -59,9 +62,13 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
     get place() {
       return place;
     },
+    get flash() {
+      return flash;
+    },
     update(dt) {
       const pos = camera.position;
       const { footstep } = entrance.update(dt, pos, place);
+      flash *= Math.exp(-dt * 3.2); // fade any active bloom; ramps/cuts re-raise it
 
       switch (place) {
         case 'street': {
@@ -99,6 +106,10 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
           entrance.doors.exit.open(exitNear);
           const exitThrough = entrance.doors.exit.ratio > 0.55;
 
+          // As you step through the open exit, the warm café light floods in,
+          // peaking at the cut so the teleport is hidden inside the bloom.
+          if (exitThrough) flash = Math.max(flash, Math.min(1, (exitZ + 1.4 - pos.z) / 1.6));
+
           liveBounds.minX = -doorwayHalf;
           liveBounds.maxX = doorwayHalf;
           liveBounds.maxZ = entryThrough ? facadeZ + 1.2 : facadeZ - 0.5;
@@ -114,6 +125,9 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
           if (footstep) audio.footstep();
           const near = Math.abs(pos.x - portalX) < openDist * 0.7 && cafeBounds.maxZ - pos.z < openDist;
           entrance.doors.cafe.open(near);
+          // Same bloom build-up as you step through the café portal back out.
+          const cafeThrough = entrance.doors.cafe.ratio > 0.55 && Math.abs(pos.x - portalX) < doorwayHalf + 0.05;
+          if (cafeThrough) flash = Math.max(flash, Math.min(1, (pos.z - (cafeBounds.maxZ - 1.6)) / 1.6));
           // Walk through the café portal (toward the back wall) -> tunnel.
           if (Math.abs(pos.x - portalX) < doorwayHalf && pos.z > cafeBounds.maxZ - 0.35) {
             toTunnelFromCafe();

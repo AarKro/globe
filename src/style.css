@@ -124,6 +124,15 @@ body {
   opacity: 1;
 }
 
+#flash {
+  position: fixed;
+  inset: 0;
+  background: #fff4e2;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
 #sound-toggle {
   position: fixed;
   bottom: 1rem;

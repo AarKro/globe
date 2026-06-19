@@ -11,7 +11,7 @@ import { createEntrance } from './scene/createEntrance.js';
 import { createEntranceAudio } from './audio/entranceAudio.js';
 import { createEntranceSequence } from './scene/entranceSequence.js';
 import { THEMES } from './themes/themes.js';
-import { ENTRANCE, PLAYER, FOV } from './scene/constants.js';
+import { ENTRANCE } from './scene/constants.js';
 
 const canvas = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -39,35 +39,11 @@ async function init() {
   scene.add(entrance.group, entrance.cafePortal);
   const audio = createEntranceAudio();
 
-  // --- Live café view through the exit door --------------------------------
-  // The tunnel and café are far apart (a teleport bridges them), so the warm
-  // "bloom" behind the exit door is a render-to-texture window: a camera at
-  // the café entrance renders the real café into the door each frame as it
-  // opens. Crossing teleports the player to this exact viewpoint, so the
-  // reveal is seamless. Only rendered while near the exit (it's a 2nd pass).
-  const portalRT = new THREE.WebGLRenderTarget(512, 640);
-  portalRT.texture.colorSpace = THREE.SRGBColorSpace;
-  // Flip horizontally so it reads as a true window (not a mirror).
-  portalRT.texture.wrapS = THREE.RepeatWrapping;
-  portalRT.texture.repeat.x = -1;
-  portalRT.texture.offset.x = 1;
-  const portalCam = new THREE.PerspectiveCamera(FOV, 512 / 640, 0.05, 50);
-  const portalX = entrance.cafePortal?._x ?? 0;
-  portalCam.position.set(portalX, PLAYER.eyeHeight, bounds.maxZ - 0.35);
-  portalCam.lookAt(portalX, PLAYER.eyeHeight, bounds.maxZ - 4);
-  entrance.bloom.material.map = portalRT.texture;
-  entrance.bloom.material.color.set(0xffffff);
-  entrance.bloom.material.needsUpdate = true; // adding a map recompiles the shader
-
-  function renderPortal() {
-    entrance.group.visible = false;
-    entrance.cafePortal.visible = false;
-    renderer.setRenderTarget(portalRT);
-    renderer.render(scene, portalCam);
-    renderer.setRenderTarget(null);
-    entrance.group.visible = true;
-    entrance.cafePortal.visible = true;
-  }
+  // Warm light-bloom overlay that masks the tunnel<->café teleport: it floods
+  // as you step through a portal door and fades to reveal the other side, so
+  // it reads as "emerging into light" rather than a cut. Driven each frame
+  // from sequence.flash (0..1).
+  const flash = document.getElementById('flash');
 
   // --- City theme (one active; rotated monthly, toggle top right) ----------
   const themeManager = createThemeManager({ scene, lights, bounds });
@@ -192,11 +168,7 @@ async function init() {
       player.update(dt, move, mouseDelta, pad.look);
       sequence.update(dt);
       audio.update(dt);
-    }
-
-    // Refresh the café-through-the-door view only while approaching the exit.
-    if (started && sequence.place === 'tunnel' && camera.position.z < ENTRANCE.exitZ + 9) {
-      renderPortal();
+      if (flash) flash.style.opacity = sequence.flash.toFixed(3);
     }
 
     renderer.render(scene, camera);

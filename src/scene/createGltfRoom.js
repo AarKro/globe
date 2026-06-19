@@ -41,6 +41,10 @@ const FLOOR_MESH_NAME = 'group1pasted__pPlane180_FLOOR_0';
 // mesh and its back wall is glass left of the counter.
 const INTERIOR = { minX: -7.19, maxX: 4.79, minZ: -6.0, maxZ: 6.0 };
 
+// Ceiling height in final world meters (the box's centre; its underside sits
+// ~at the wall tops). Matches the model's original ~2.4 m ceiling.
+const CEILING_Y = 2.45;
+
 const loader = new GLTFLoader();
 const loadGltf = (url) =>
   new Promise((resolve, reject) => loader.load(url, resolve, undefined, reject));
@@ -102,9 +106,26 @@ export async function createGltfRoom() {
     furniture.add(set);
   });
 
+  // The empty room GLB has its ceiling stripped, so looking up shows the
+  // scene background / distant entrance rooftops ("clipping skyline"). Cap the
+  // interior with a simple ceiling in plain world meters (like the furniture),
+  // lit from below by the warm lamps. Height matches the model's original
+  // ceiling (~2.4 m); it overhangs the interior so it seats on the wall tops
+  // with no gap. Re-check CEILING_Y if the room GLB or ROOM_SCALE changes.
+  const ceiling = new THREE.Mesh(
+    new THREE.BoxGeometry(INTERIOR.maxX - INTERIOR.minX + 1.4, 0.2, INTERIOR.maxZ - INTERIOR.minZ + 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.95, metalness: 0 })
+  );
+  ceiling.name = 'ceiling';
+  ceiling.position.set(
+    (INTERIOR.minX + INTERIOR.maxX) / 2,
+    CEILING_Y,
+    (INTERIOR.minZ + INTERIOR.maxZ) / 2
+  );
+
   const room = new THREE.Group();
   room.name = 'room';
-  room.add(shell, furniture);
+  room.add(shell, furniture, ceiling);
 
   const m = PLAYER.boundsMargin;
   const bounds = {
