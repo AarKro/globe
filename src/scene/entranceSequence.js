@@ -20,12 +20,14 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
   let place = 'street';
   let pendingClose = false; // awaiting the entry door to shut behind us
   let flash = 0; // 0..1 warm-bloom overlay that masks the teleport cut
+  let cafeArmed = false; // arms café->tunnel only after you step away from the portal
   Object.assign(liveBounds, STREET);
 
   // Pose to drop into when stepping from the café back into the tunnel: at the
   // exit end, facing +z up the tunnel toward the street.
   const tunnelReturnPose = { x: 0, z: exitZ + 1.3, yaw: Math.PI };
   const portalX = entrance.cafePortal?._x ?? 0;
+  const portalZ = entrance.cafePortal?._z ?? cafeBounds.maxZ;
 
   function toStreet() {
     place = 'street';
@@ -52,6 +54,7 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
   function toCafe() {
     place = 'cafe';
     pendingClose = false;
+    cafeArmed = false; // don't immediately re-trigger at the arrival spot
     flash = 1; // white-out covers the cut
     player.teleport(entrance.arrivalPose);
     Object.assign(liveBounds, cafeBounds);
@@ -123,15 +126,16 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
         }
         case 'cafe': {
           if (footstep) audio.footstep();
-          const near = Math.abs(pos.x - portalX) < openDist * 0.7 && cafeBounds.maxZ - pos.z < openDist;
-          entrance.doors.cafe.open(near);
-          // Same bloom build-up as you step through the café portal back out.
-          const cafeThrough = entrance.doors.cafe.ratio > 0.55 && Math.abs(pos.x - portalX) < doorwayHalf + 0.05;
-          if (cafeThrough) flash = Math.max(flash, Math.min(1, (pos.z - (cafeBounds.maxZ - 1.6)) / 1.6));
-          // Walk through the café portal (toward the back wall) -> tunnel.
-          if (Math.abs(pos.x - portalX) < doorwayHalf && pos.z > cafeBounds.maxZ - 0.35) {
-            toTunnelFromCafe();
+          // The portal sits at the built-in tunnel-corridor mouth; trigger by
+          // proximity (orientation-agnostic), with the bloom building as you
+          // reach it.
+          const d = Math.hypot(pos.x - portalX, pos.z - portalZ);
+          if (d > openDist) cafeArmed = true; // stepped away — now it can re-fire
+          entrance.doors.cafe.open(cafeArmed && d < openDist);
+          if (cafeArmed && entrance.doors.cafe.ratio > 0.5) {
+            flash = Math.max(flash, Math.min(1, (openDist - d) / openDist));
           }
+          if (cafeArmed && d < 0.7) toTunnelFromCafe();
           break;
         }
       }

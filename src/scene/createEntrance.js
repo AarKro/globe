@@ -166,24 +166,27 @@ function doorwayFrame(z, accentTargets, faceDir = 1) {
   return group;
 }
 
-export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds } = {}) {
+export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, tunnelMouth } = {}) {
   const group = new THREE.Group();
   group.name = 'entrance';
 
   const accent = new THREE.Color(initialAccent);
   const accentTargets = [];
 
-  // ---- Daytime sky. The continuous building row across the street end + this
-  // high cap occlude the night café and the dark background behind them. The
-  // top cap stops short of the café (z >= skyTopMinZ) so the café keeps its
-  // own dark ceiling — daytime never reaches it. ---------------------------
+  // ---- Daytime sky enclosure around the alley + tunnel. With the café
+  // building now low, a front backdrop (`skyFront`) on the café side fills the
+  // view over its roof with sky instead of the dark night background. The
+  // enclosure stops short of the café (z >= skyTopMinZ); the café sits beyond
+  // it and keeps its own ceiling, so daytime never reaches its interior. ----
   const skyTop = SKY_TOP;
   const skyBack = streetBackZ + 22;
-  const skyTopMinZ = exitZ + 2; // cap covers over the rooftops, not the café
+  const skyTopMinZ = exitZ - 4; // just café-side of the tunnel exit
   const skyGrad = () =>
     new THREE.MeshBasicMaterial({ map: gradientTexture('#6aa6e6', '#dfeaf3'), side: THREE.DoubleSide });
   const skyBackPlane = new THREE.Mesh(new THREE.PlaneGeometry(wingHalfWidth * 2.4, skyTop * 1.4), skyGrad());
   skyBackPlane.position.set(0, skyTop * 0.5, skyBack);
+  const skyFront = new THREE.Mesh(new THREE.PlaneGeometry(wingHalfWidth * 2.4, skyTop * 1.4), skyGrad());
+  skyFront.position.set(0, skyTop * 0.5, skyTopMinZ);
   const skyL = new THREE.Mesh(new THREE.PlaneGeometry(skyBack - skyTopMinZ + 8, skyTop * 1.4), skyGrad());
   skyL.rotation.y = Math.PI / 2;
   skyL.position.set(-wingHalfWidth, skyTop * 0.5, (skyTopMinZ + skyBack) / 2);
@@ -196,7 +199,7 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds } 
   );
   skyTopPlane.rotation.x = Math.PI / 2;
   skyTopPlane.position.set(0, skyTop, (skyTopMinZ + skyBack) / 2);
-  group.add(skyBackPlane, skyL, skyR, skyTopPlane);
+  group.add(skyBackPlane, skyFront, skyL, skyR, skyTopPlane);
 
   // ---- Cobbled street ground ----------------------------------------------
   const cobble = (() => {
@@ -328,8 +331,11 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds } 
 
   // White neon rings (the skeleton). Each gets its own material so it can be
   // lit independently; activation runs a frontier ahead of the player.
+  // 3/4 rings (270° arc) with the 90° gap centred at the bottom, where the
+  // flat floor runs — so they spring from the floor on either side. The arc
+  // draws from 0°; rotating by -45° puts its gap symmetrically at the bottom.
   const rings = [];
-  const ringGeo = new THREE.TorusGeometry(tunnelRadius - 0.03, 0.035, 8, 40);
+  const ringGeo = new THREE.TorusGeometry(tunnelRadius - 0.03, 0.035, 8, 36, Math.PI * 1.5);
   const nRings = Math.max(2, Math.floor(tunLen / ringSpacing) - 1);
   const ringStart = exitZ + (tunLen - (nRings - 1) * ringSpacing) / 2;
   for (let i = 0; i < nRings; i++) {
@@ -337,6 +343,7 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds } 
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const ring = new THREE.Mesh(ringGeo, mat);
     ring.position.set(0, tunCenterY, z);
+    ring.rotation.z = -Math.PI / 4;
     group.add(ring);
     rings.push({ mat, z, activated: false, bright: 0.05 });
   }
@@ -402,32 +409,35 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds } 
   tiles.instanceMatrix.needsUpdate = true;
   group.add(tiles);
 
-  // ---- The café-side portal: a matching black door standing in the café. --
-  // Walking through it teleports back into the tunnel (the two are far apart).
+  // ---- The café-side portal: a matching black door at the mouth of the new
+  // room's built-in tunnel corridor (-x wall), so the entrance "ends up" there
+  // — you emerge through it into the café. Walking back through teleports to
+  // the procedural tunnel's exit (the two are far apart). Built facing -z
+  // around the origin, then oriented onto the -x wall (facing +x). ----------
   const cafePortal = new THREE.Group();
   cafePortal.name = 'cafePortal';
   let arrivalPose = { x: 0, z: 0, yaw: 0 };
-  if (cafeBounds) {
-    const px = -3.0;
-    const pz = cafeBounds.maxZ + 0.25; // against the back wall
+  const mouth = tunnelMouth || (cafeBounds ? { x: 0, z: cafeBounds.maxZ } : null);
+  if (mouth) {
     const cpFrameMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     accentTargets.push({ material: cpFrameMat, factor: 0.6 });
     const post = (x) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.12, doorHeight + 0.1, 0.12), cpFrameMat);
-      m.position.set(px + x, (doorHeight + 0.1) / 2, pz);
+      m.position.set(x, (doorHeight + 0.1) / 2, 0);
       return m;
     };
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 0.34, 0.12, 0.12), cpFrameMat);
-    lintel.position.set(px, doorHeight + 0.05, pz);
-    const back = slab(doorWidth + 0.34, doorHeight + 0.1, 0.06);
-    back.position.set(px, (doorHeight + 0.1) / 2, pz + 0.1);
+    lintel.position.set(0, doorHeight + 0.05, 0);
     const cafeLeaf = makeDoor('cafePortalDoor', accentTargets);
-    cafeLeaf.group.position.set(px - doorWidth / 2, 0, pz - 0.05);
-    cafePortal.add(post(-half - 0.1), post(half + 0.1), lintel, back, cafeLeaf.group);
+    cafeLeaf.group.position.set(-doorWidth / 2, 0, -0.05);
+    cafePortal.add(post(-half - 0.1), post(half + 0.1), lintel, cafeLeaf.group);
     cafePortal._door = cafeLeaf;
-    cafePortal._x = px;
-    cafePortal._z = pz;
-    arrivalPose = { x: px, z: cafeBounds.maxZ - 1.2, yaw: 0 };
+    cafePortal.position.set(mouth.x, 0, mouth.z);
+    cafePortal.rotation.y = -Math.PI / 2; // -z-facing portal -> faces +x (into room)
+    cafePortal._x = mouth.x;
+    cafePortal._z = mouth.z;
+    // Arrive a step into the room from the mouth, facing +x (into the café).
+    arrivalPose = { x: mouth.x + 1.0, z: mouth.z, yaw: -Math.PI / 2 };
   }
 
   // ---- Footstep cadence + per-frame update --------------------------------

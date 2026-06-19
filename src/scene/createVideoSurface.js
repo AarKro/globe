@@ -23,13 +23,26 @@ function makeFallbackTexture() {
 // material so a single video drives every window. Swap footage at any time
 // with setSource(url); on autoplay failure the gradient fallback stays up
 // and the rest of the room is unaffected.
-export function createVideoSurface(meshes) {
+export function createVideoSurface(meshes, { coverAspect = 0 } = {}) {
   const fallback = new THREE.MeshBasicMaterial({ map: makeFallbackTexture() });
   meshes.forEach((mesh) => {
     mesh.material = fallback;
   });
 
   let video = null;
+
+  // Center-crop the playing video to the surface aspect ("cover"), so a wide
+  // street clip fills a narrow ribbon window without distortion.
+  function applyCover(texture) {
+    if (!coverAspect || !video?.videoWidth) return;
+    const videoAspect = video.videoWidth / video.videoHeight;
+    let rx = 1;
+    let ry = 1;
+    if (videoAspect > coverAspect) rx = coverAspect / videoAspect;
+    else ry = videoAspect / coverAspect;
+    texture.repeat.set(rx, ry);
+    texture.offset.set((1 - rx) / 2, (1 - ry) / 2);
+  }
 
   async function setSource(url) {
     if (video) {
@@ -59,6 +72,8 @@ export function createVideoSurface(meshes) {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
+    applyCover(texture);
+    if (video.readyState < 1) video.addEventListener('loadedmetadata', () => applyCover(texture), { once: true });
     const material = new THREE.MeshBasicMaterial({ map: texture });
     meshes.forEach((mesh) => {
       mesh.material = material;

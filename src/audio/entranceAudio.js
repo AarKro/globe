@@ -1,31 +1,38 @@
-// Procedural ambience for the entrance — no audio assets. Sound is tied to
-// WHERE the player is:
+// Entrance ambience, gated by WHERE the player is:
 //   - street : silent (you hear nothing outside)
-//   - tunnel : enter from the street and the door closes behind -> ~1.6 s of
-//              silence, then the music fades in very low and grows louder as
-//              you approach the café door (and back down as you return)
+//   - tunnel : enter from the street, the door shuts, ~1.6 s of silence, then
+//              the music fades in low and swells louder toward the café
 //   - café   : the music plays at a steady, present level
 //
-// A low oscillator pad through a feedback delay gives the space; a gentle
-// pentatonic arpeggio over it reads as music; soft thumps mark footsteps.
-// Tone is tinted per city theme.
+// The music itself is an audio FILE when one is available, falling back to a
+// quiet synth pad + arpeggio when it isn't. Drop files into `public/audio/`
+// (see MUSIC_FILES below) and they replace the synth automatically — no code
+// change, and a missing file just 404s and falls back. Either source runs
+// through the same `musicGain` swell, so the place/intensity behaviour is
+// identical. Footsteps and the door clunk stay procedural SFX over the top.
 //
-// The AudioContext is created lazily in resume() from a user gesture; a
-// missing/blocked Web Audio API is a silent no-op. The host calls update(dt)
-// every frame to drive the swell, the silence timer, and the arpeggio.
+// The AudioContext is created lazily in resume() from a user gesture.
 
+// Candidate files per theme, tried in order; first that decodes wins. Resolved
+// against the Vite base URL so it works locally and on GitHub Pages.
+const MUSIC_FILES = {
+  tokyo: ['audio/ambient-tokyo.mp3', 'audio/ambient.mp3'],
+  newyork: ['audio/ambient-newyork.mp3', 'audio/ambient.mp3'],
+};
+
+// Quiet synth fallback, tinted per theme (kept gentle — not the old loud hum).
 const TONES = {
-  tokyo: { root: 196, intervals: [1, 1.5, 2, 3], cutoff: 1100, detune: 6, delay: 0.3, feedback: 0.34 },
-  newyork: { root: 130.8, intervals: [1, 1.2, 1.5, 1.78], cutoff: 760, detune: 9, delay: 0.4, feedback: 0.4 },
+  tokyo: { root: 196, intervals: [1, 1.5, 2, 3], cutoff: 1100, detune: 6, delay: 0.3, feedback: 0.32 },
+  newyork: { root: 130.8, intervals: [1, 1.2, 1.5, 1.78], cutoff: 760, detune: 9, delay: 0.4, feedback: 0.38 },
 };
 const SILENCE_SEC = 1.6;
-const CAFE_LEVEL = 0.4;
-const PENTA = [0, 3, 5, 7, 10]; // minor pentatonic, gentle
+const PENTA = [0, 3, 5, 7, 10];
 
 export function createEntranceAudio() {
   let ctx = null;
   let master = null;
-  let padGain = null;
+  let musicGain = null; // the swell (place/intensity) gain — shared by file + synth
+  let fallbackGain = null; // pad+arp bus; muted to 0 once a file is playing
   let padFilter = null;
   let melodyGain = null;
   let delay = null;
@@ -34,21 +41,27 @@ export function createEntranceAudio() {
   let noiseBuf = null;
   let started = false;
 
+  let usingFile = false;
+  let fileSource = null;
+  let fileKey = null; // which file URL is currently playing
+  const buffers = new Map(); // url -> AudioBuffer (or 'fail')
+
   let muted = false;
   let toneId = 'tokyo';
   let place = 'street';
-  let intensity = 0; // tunnel progress 0..1
-  let silence = 0; // remaining forced-silence seconds
+  let intensity = 0;
+  let silence = 0;
   let nextNote = 0;
   let noteIdx = 0;
 
   const tone = () => TONES[toneId] || TONES.tokyo;
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-  function targetVol() {
-    if (place === 'cafe') return CAFE_LEVEL;
-    if (place === 'tunnel') return silence > 0 ? 0 : 0.03 + 0.5 * intensity;
-    return 0; // street
+  // Swell shape in 0..~0.5 (kept modest so nothing blares).
+  function swell() {
+    if (place === 'cafe') return 0.5;
+    if (place === 'tunnel') return silence > 0 ? 0 : 0.04 + 0.46 * intensity;
+    return 0;
   }
 
   function buildGraph() {
@@ -61,22 +74,27 @@ export function createEntranceAudio() {
     feedback = ctx.createGain();
     feedback.gain.value = tone().feedback;
     const wet = ctx.createGain();
-    wet.gain.value = 0.28;
+    wet.gain.value = 0.25;
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
     wet.connect(master);
 
-    padGain = ctx.createGain();
-    padGain.gain.value = 0;
-    padGain.connect(master);
-    padGain.connect(delay);
+    musicGain = ctx.createGain();
+    musicGain.gain.value = 0;
+    musicGain.connect(master);
+    musicGain.connect(delay);
+
+    // --- Quiet synth fallback (pad + arpeggio) -> fallbackGain -> musicGain ---
+    fallbackGain = ctx.createGain();
+    fallbackGain.gain.value = 1;
+    fallbackGain.connect(musicGain);
 
     padFilter = ctx.createBiquadFilter();
     padFilter.type = 'lowpass';
     padFilter.frequency.value = tone().cutoff * 0.5;
     padFilter.Q.value = 0.7;
-    padFilter.connect(padGain);
+    padFilter.connect(fallbackGain);
 
     oscillators = tone().intervals.map((mult, i) => {
       const osc = ctx.createOscillator();
@@ -84,7 +102,7 @@ export function createEntranceAudio() {
       osc.frequency.value = tone().root * mult;
       osc.detune.value = (i - 1) * tone().detune;
       const g = ctx.createGain();
-      g.gain.value = i === 0 ? 0.5 : 0.3;
+      g.gain.value = i === 0 ? 0.16 : 0.1; // gentle, not the old loud drone
       osc.connect(g);
       g.connect(padFilter);
       osc.start();
@@ -94,21 +112,69 @@ export function createEntranceAudio() {
     const lfo = ctx.createOscillator();
     lfo.frequency.value = 0.08;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 120;
+    lfoGain.gain.value = 90;
     lfo.connect(lfoGain);
     lfoGain.connect(padFilter.frequency);
     lfo.start();
 
     melodyGain = ctx.createGain();
     melodyGain.gain.value = 0;
-    melodyGain.connect(master);
-    melodyGain.connect(delay);
+    melodyGain.connect(fallbackGain);
 
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.2, ctx.sampleRate);
     const data = noiseBuf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
   }
 
+  // --- File loading ---------------------------------------------------------
+  async function loadBuffer(url) {
+    if (buffers.has(url)) return buffers.get(url) === 'fail' ? null : buffers.get(url);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      buffers.set(url, buf);
+      return buf;
+    } catch {
+      buffers.set(url, 'fail'); // remember the miss; fall back silently
+      return null;
+    }
+  }
+
+  function playFile(buf, key) {
+    if (fileKey === key && usingFile) return;
+    try {
+      fileSource?.stop();
+    } catch {
+      /* already stopped */
+    }
+    fileSource = ctx.createBufferSource();
+    fileSource.buffer = buf;
+    fileSource.loop = true;
+    fileSource.connect(musicGain);
+    fileSource.start();
+    fileKey = key;
+    usingFile = true;
+    fallbackGain.gain.setTargetAtTime(0, ctx.currentTime, 0.4); // hush the synth
+  }
+
+  // Try the current theme's candidate files; first that decodes plays.
+  async function ensureMusic() {
+    if (!ctx) return;
+    const base = import.meta.env.BASE_URL || './';
+    const candidates = (MUSIC_FILES[toneId] || []).map((p) => base + p);
+    for (const url of candidates) {
+      const buf = await loadBuffer(url);
+      if (buf) {
+        playFile(buf, url);
+        return;
+      }
+    }
+    // No file for this theme — keep the synth fallback audible.
+    if (!usingFile) fallbackGain.gain.setTargetAtTime(1, ctx.currentTime, 0.4);
+  }
+
+  // --- Synth arpeggio (fallback only) --------------------------------------
   function playNote(t) {
     const octave = Math.floor(noteIdx / PENTA.length) % 2;
     const semis = PENTA[noteIdx % PENTA.length] + 12 * (1 + octave);
@@ -118,20 +184,18 @@ export function createEntranceAudio() {
     osc.frequency.value = freq;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
     osc.connect(g);
     g.connect(melodyGain);
     osc.start(t);
     osc.stop(t + 0.6);
   }
-
   function scheduleNotes() {
     const ahead = ctx.currentTime + 0.25;
-    const interval = 0.42;
     while (nextNote < ahead) {
       playNote(nextNote);
-      nextNote += interval;
+      nextNote += 0.42;
       noteIdx++;
     }
   }
@@ -158,6 +222,7 @@ export function createEntranceAudio() {
           buildGraph();
           started = true;
           nextNote = ctx.currentTime;
+          ensureMusic();
         }
         ctx.resume?.();
         master.gain.setTargetAtTime(muted ? 0 : 0.85, ctx.currentTime, 0.6);
@@ -165,32 +230,37 @@ export function createEntranceAudio() {
         /* no audio — silent */
       }
     },
-    // Drives the swell, silence timer, and arpeggio. Call every frame.
     update(dt) {
       if (!ctx) return;
       if (silence > 0) silence = Math.max(0, silence - dt);
-      const tv = targetVol();
+      const tv = swell();
       const tc = ctx.currentTime;
-      padGain.gain.setTargetAtTime(tv, tc, 0.4);
-      melodyGain.gain.setTargetAtTime(tv * 0.7, tc, 0.4);
-      padFilter.frequency.setTargetAtTime(tone().cutoff * (0.5 + 0.8 * Math.min(1, tv * 2)), tc, 0.4);
-      if (tv > 0.02 && !muted) scheduleNotes();
-      else nextNote = tc; // stay aligned so notes don't burst on resume
+      musicGain.gain.setTargetAtTime(tv, tc, 0.4);
+      if (!usingFile) {
+        padFilter.frequency.setTargetAtTime(tone().cutoff * (0.5 + 0.8 * Math.min(1, tv * 2.5)), tc, 0.4);
+        melodyGain.gain.setTargetAtTime(tv > 0.02 && !muted ? 0.85 : 0, tc, 0.4);
+        if (tv > 0.02 && !muted) scheduleNotes();
+        else nextNote = tc;
+      }
     },
     setPlace(p) {
       place = p;
       if (p !== 'tunnel') silence = 0;
     },
-    // Stay fully silent (used between entering the tunnel and the door shutting).
     hold() {
       silence = 1e9;
     },
-    // Begin the timed hush, after which the music swells in.
     armHush(sec = SILENCE_SEC) {
       silence = sec;
     },
-    // A meaty door-close clunk — a one-shot SFX heard even during the hush,
-    // so you feel the tunnel seal behind you.
+    setIntensity(v) {
+      intensity = clamp01(v);
+    },
+    setTheme(id) {
+      toneId = TONES[id] ? id : toneId;
+      retune();
+      ensureMusic(); // swap to a theme-specific file if one exists
+    },
     doorClose() {
       if (!ctx || !started || muted) return;
       try {
@@ -208,7 +278,6 @@ export function createEntranceAudio() {
         body.connect(env);
         body.start(t);
         body.stop(t + 0.36);
-        // Wooden knock.
         const kn = ctx.createBufferSource();
         kn.buffer = noiseBuf;
         const bp = ctx.createBiquadFilter();
@@ -224,7 +293,6 @@ export function createEntranceAudio() {
         kg.connect(master);
         kg.connect(delay);
         kn.start(t);
-        // Latch click.
         const cl = ctx.createBufferSource();
         cl.buffer = noiseBuf;
         const hp = ctx.createBiquadFilter();
@@ -242,21 +310,13 @@ export function createEntranceAudio() {
         /* ignore */
       }
     },
-    setIntensity(v) {
-      intensity = clamp01(v);
-    },
-    setTheme(id) {
-      toneId = TONES[id] ? id : toneId;
-      retune();
-    },
     footstep() {
-      // Footsteps are diegetic sound — silent outside and during the hush.
       if (!ctx || !started || muted || place === 'street' || silence > 0) return;
       try {
         const t = ctx.currentTime;
         const env = ctx.createGain();
         env.gain.setValueAtTime(0.0001, t);
-        env.gain.exponentialRampToValueAtTime(0.07, t + 0.008);
+        env.gain.exponentialRampToValueAtTime(0.06, t + 0.008);
         env.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
         env.connect(master);
         const thump = ctx.createOscillator();
@@ -267,7 +327,7 @@ export function createEntranceAudio() {
         thump.start(t);
         thump.stop(t + 0.24);
       } catch {
-        /* ignore transient audio errors */
+        /* ignore */
       }
     },
     setMuted(v) {

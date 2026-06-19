@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAYER } from './constants.js';
 
-const ROOM_URL = new URL('../assets/models/empty_coffeeroom.glb', import.meta.url).href;
+const ROOM_URL = new URL('../assets/models/room.glb', import.meta.url).href;
 const TABLE_SET_URL = new URL('../assets/models/wooden_table_set.glb', import.meta.url).href;
 
 // The source model is ~2.9 units across with a 0.48-unit ceiling; this
@@ -34,16 +34,22 @@ const TABLE_SET_PLACEMENTS = [
 
 const FLOOR_MESH_NAME = 'group1pasted__pPlane180_FLOOR_0';
 
-// Interior wall faces, raycast-measured in final world meters (the floor
-// and the building shell both extend past the interior room — exterior
-// pavement/terrace — so no mesh bounding box gives these). Re-measure if
-// the room GLB or ROOM_SCALE changes. Note: the empty room has no ceiling
-// mesh and its back wall is glass left of the counter.
-const INTERIOR = { minX: -7.19, maxX: 4.79, minZ: -6.0, maxZ: 6.0 };
+// Interior in final world meters (recenter on the floor, ×5). room.glb's floor
+// and walls share the same footprint (no exterior pavement), so this is the
+// floor extent minus a little. Re-measure if the room GLB or ROOM_SCALE
+// changes. The counter sits back-right, the window is on the -z wall, and a
+// built-in tunnel corridor pokes out the -x wall at the back-left.
+const INTERIOR = { minX: -5.8, maxX: 5.8, minZ: -5.8, maxZ: 5.8 };
 
 // Ceiling height in final world meters (the box's centre; its underside sits
-// ~at the wall tops). Matches the model's original ~2.4 m ceiling.
-const CEILING_Y = 2.45;
+// ~at the wall tops, ≈ 2.39 m in room.glb).
+const CEILING_Y = 2.42;
+
+// The window opening on the -z wall (world meters) — a ribbon the street video
+// fills. And the built-in tunnel corridor's mouth on the -x wall, where the
+// entrance experience delivers the player into the café.
+const WINDOW = { cx: 1.8, cy: 1.68, z: -5.97, w: 6.0, h: 1.32 };
+const TUNNEL_MOUTH = { x: -5.9, z: 4.77 };
 
 const loader = new GLTFLoader();
 const loadGltf = (url) =>
@@ -123,9 +129,19 @@ export async function createGltfRoom() {
     (INTERIOR.minZ + INTERIOR.maxZ) / 2
   );
 
+  // Window screen: a plane filling the -z wall ribbon, facing into the room.
+  // createVideoSurface swaps in the street video (per theme); until then a
+  // gradient stands in. PlaneGeometry faces +z by default — toward the room.
+  const windowScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(WINDOW.w, WINDOW.h),
+    new THREE.MeshBasicMaterial({ color: 0x223044 })
+  );
+  windowScreen.name = 'windowScreen';
+  windowScreen.position.set(WINDOW.cx, WINDOW.cy, WINDOW.z);
+
   const room = new THREE.Group();
   room.name = 'room';
-  room.add(shell, furniture, ceiling);
+  room.add(shell, furniture, ceiling, windowScreen);
 
   const m = PLAYER.boundsMargin;
   const bounds = {
@@ -143,5 +159,5 @@ export async function createGltfRoom() {
     yaw: -Math.PI / 4,
   };
 
-  return { room, bounds, spawn };
+  return { room, bounds, spawn, windowScreen, tunnelMouth: TUNNEL_MOUTH };
 }

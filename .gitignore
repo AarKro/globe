@@ -17,3 +17,7 @@ dist/
 
 # Logs
 *.log
+
+# Large source video originals — the compressed loops in public/videos/ are
+# what the app uses. Re-encode with ffmpeg if you replace these.
+src/assets/videos/*.mov

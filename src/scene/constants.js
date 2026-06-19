@@ -45,7 +45,7 @@ export const ENTRANCE = {
   streetBackZ: 66, // how far back the open street extends
   wingHalfWidth: 50, // ground / sky / building-row half-extent in x
   streetHalf: 3.5, // walkable half-width of the alley approaching the café
-  facadeHeight: 20, // the café building is a normal Zürich building, not a slab
+  facadeHeight: 6.7, // a low café building (≈1/3 of its neighbours) at the alley end
   cafeWidth: 7, // façade width of the café building (fills the alley end)
   doorWidth: 1.9,
   doorHeight: 2.35,

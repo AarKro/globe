@@ -25,7 +25,7 @@ const hint = document.getElementById('hint');
 async function init() {
   const { scene, camera, renderer } = createScene(canvas);
 
-  const { room, bounds } = await createGltfRoom();
+  const { room, bounds, windowScreen, tunnelMouth } = await createGltfRoom();
   scene.add(room);
   const lights = createLights(bounds);
   scene.add(lights);
@@ -35,9 +35,19 @@ async function init() {
   // the entrance accent and audio. Lives far down +z; the player spawns here
   // and is teleported into the café on arrival.
   const themeAccent = (id) => THEMES[id]?.lighting.lampColors[0] ?? 0x4fd8ff;
-  const entrance = createEntrance({ cafeBounds: bounds });
+  const entrance = createEntrance({ cafeBounds: bounds, tunnelMouth });
   scene.add(entrance.group, entrance.cafePortal);
   const audio = createEntranceAudio();
+
+  // Street video filling the café window, switched with the city theme — look
+  // out onto Tokyo or New York. Files are compressed/muted/looping in
+  // public/videos; cover-cropped to the window's wide ribbon aspect.
+  const videoBase = import.meta.env.BASE_URL || './';
+  const THEME_VIDEO = { tokyo: 'videos/tokyo.mp4', newyork: 'videos/newyork.mp4' };
+  const windowAspect = windowScreen.geometry.parameters.width / windowScreen.geometry.parameters.height;
+  const videoSurface = createVideoSurface([windowScreen], { coverAspect: windowAspect });
+  const applyThemeVideo = (id) => videoSurface.setSource(THEME_VIDEO[id] ? videoBase + THEME_VIDEO[id] : null);
+  let activeTheme = null;
 
   // Warm light-bloom overlay that masks the tunnel<->café teleport: it floods
   // as you step through a portal door and fades to reveal the other side, so
@@ -53,6 +63,8 @@ async function init() {
     themeManager.setTheme(id);
     entrance.setAccent(themeAccent(id));
     audio.setTheme(id);
+    applyThemeVideo(id);
+    activeTheme = id;
     localStorage.setItem('globe-theme', id);
     themeButtons.forEach((b) => b.classList.toggle('active', b.dataset.theme === id));
   }
@@ -60,13 +72,6 @@ async function init() {
   const savedTheme = localStorage.getItem('globe-theme');
   selectTheme(themeManager.has(savedTheme) ? savedTheme : 'tokyo');
   themeButtons.forEach((b) => b.addEventListener('click', () => selectTheme(b.dataset.theme)));
-
-  // The GLTF room has no dedicated media mesh yet; the video surface module
-  // stays wired for when one is reserved (window pane or wall screen).
-  const videoSurface = createVideoSurface([]);
-  // Drop footage into src/assets/videos and point at it here, e.g.:
-  // videoSurface.setSource(new URL('./assets/videos/street.mp4', import.meta.url).href);
-  void videoSurface;
 
   // The player clamps to a single mutable rect; the entrance sequence evolves
   // it (street -> tunnel -> café) and swaps in the café bounds on arrival.
@@ -98,6 +103,7 @@ async function init() {
     started = true;
     overlay.classList.add('hidden');
     audio.resume(); // any start path (click, gamepad, pointer lock) unlocks audio
+    if (activeTheme) applyThemeVideo(activeTheme); // ensure playback after a gesture
   }
 
   // Pointer lock can be unavailable (headless browsers, some iframes);
