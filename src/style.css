@@ -124,6 +124,31 @@ body {
   opacity: 1;
 }
 
+#sound-toggle {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: #f3e9dc;
+  background: rgba(26, 18, 12, 0.8);
+  border: 1px solid rgba(243, 233, 220, 0.2);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+  opacity: 0.7;
+  z-index: 10;
+}
+
+#sound-toggle:hover {
+  opacity: 1;
+}
+
+#sound-toggle.muted {
+  opacity: 0.4;
+}
+
 #hint {
   position: fixed;
   bottom: 1rem;

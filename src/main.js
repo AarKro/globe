@@ -7,6 +7,11 @@ import { createPlayerController } from './controls/playerController.js';
 import { createKeyboardMouseInput } from './controls/keyboardMouseInput.js';
 import { createGamepadInput } from './controls/gamepadInput.js';
 import { createThemeManager } from './themes/themeManager.js';
+import { createEntrance } from './scene/createEntrance.js';
+import { createEntranceAudio } from './audio/entranceAudio.js';
+import { createEntranceSequence } from './scene/entranceSequence.js';
+import { THEMES } from './themes/themes.js';
+import { ENTRANCE, PLAYER, FOV } from './scene/constants.js';
 
 const canvas = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -20,10 +25,49 @@ const hint = document.getElementById('hint');
 async function init() {
   const { scene, camera, renderer } = createScene(canvas);
 
-  const { room, bounds, spawn } = await createGltfRoom();
+  const { room, bounds } = await createGltfRoom();
   scene.add(room);
   const lights = createLights(bounds);
   scene.add(lights);
+
+  // --- Entrance experience (street -> dark tunnel -> arrival) ---------------
+  // Built before the theme is applied so the first selectTheme() also tints
+  // the entrance accent and audio. Lives far down +z; the player spawns here
+  // and is teleported into the café on arrival.
+  const themeAccent = (id) => THEMES[id]?.lighting.lampColors[0] ?? 0x4fd8ff;
+  const entrance = createEntrance({ cafeBounds: bounds });
+  scene.add(entrance.group, entrance.cafePortal);
+  const audio = createEntranceAudio();
+
+  // --- Live café view through the exit door --------------------------------
+  // The tunnel and café are far apart (a teleport bridges them), so the warm
+  // "bloom" behind the exit door is a render-to-texture window: a camera at
+  // the café entrance renders the real café into the door each frame as it
+  // opens. Crossing teleports the player to this exact viewpoint, so the
+  // reveal is seamless. Only rendered while near the exit (it's a 2nd pass).
+  const portalRT = new THREE.WebGLRenderTarget(512, 640);
+  portalRT.texture.colorSpace = THREE.SRGBColorSpace;
+  // Flip horizontally so it reads as a true window (not a mirror).
+  portalRT.texture.wrapS = THREE.RepeatWrapping;
+  portalRT.texture.repeat.x = -1;
+  portalRT.texture.offset.x = 1;
+  const portalCam = new THREE.PerspectiveCamera(FOV, 512 / 640, 0.05, 50);
+  const portalX = entrance.cafePortal?._x ?? 0;
+  portalCam.position.set(portalX, PLAYER.eyeHeight, bounds.maxZ - 0.35);
+  portalCam.lookAt(portalX, PLAYER.eyeHeight, bounds.maxZ - 4);
+  entrance.bloom.material.map = portalRT.texture;
+  entrance.bloom.material.color.set(0xffffff);
+  entrance.bloom.material.needsUpdate = true; // adding a map recompiles the shader
+
+  function renderPortal() {
+    entrance.group.visible = false;
+    entrance.cafePortal.visible = false;
+    renderer.setRenderTarget(portalRT);
+    renderer.render(scene, portalCam);
+    renderer.setRenderTarget(null);
+    entrance.group.visible = true;
+    entrance.cafePortal.visible = true;
+  }
 
   // --- City theme (one active; rotated monthly, toggle top right) ----------
   const themeManager = createThemeManager({ scene, lights, bounds });
@@ -31,6 +75,8 @@ async function init() {
 
   function selectTheme(id) {
     themeManager.setTheme(id);
+    entrance.setAccent(themeAccent(id));
+    audio.setTheme(id);
     localStorage.setItem('globe-theme', id);
     themeButtons.forEach((b) => b.classList.toggle('active', b.dataset.theme === id));
   }
@@ -46,15 +92,27 @@ async function init() {
   // videoSurface.setSource(new URL('./assets/videos/street.mp4', import.meta.url).href);
   void videoSurface;
 
-  const player = createPlayerController(camera, bounds, spawn);
+  // The player clamps to a single mutable rect; the entrance sequence evolves
+  // it (street -> tunnel -> café) and swaps in the café bounds on arrival.
+  const liveBounds = { minX: -6, maxX: 6, minZ: 0, maxZ: 0 };
+  const player = createPlayerController(camera, liveBounds, ENTRANCE.spawn);
   const keyboard = createKeyboardMouseInput(canvas);
   const gamepad = createGamepadInput();
+
+  const sequence = createEntranceSequence({
+    entrance,
+    audio,
+    camera,
+    player,
+    liveBounds,
+    cafeBounds: bounds,
+  });
 
   if (import.meta.env.DEV) {
     // Handle for headless smoke tests and console tinkering.
     // freecam.enabled pauses the player controller so scripted cameras
     // (smoke tests) can position the camera without being overwritten.
-    window.__globe = { scene, camera, bounds, THREE, freecam: { enabled: false } };
+    window.__globe = { scene, camera, bounds, liveBounds, entrance, sequence, audio, THREE, freecam: { enabled: false } };
   }
 
   // --- Overlay / pointer lock ----------------------------------------------
@@ -63,6 +121,7 @@ async function init() {
   function dismissOverlay() {
     started = true;
     overlay.classList.add('hidden');
+    audio.resume(); // any start path (click, gamepad, pointer lock) unlocks audio
   }
 
   // Pointer lock can be unavailable (headless browsers, some iframes);
@@ -80,6 +139,16 @@ async function init() {
     tryPointerLock();
     dismissOverlay();
   });
+
+  // Sound on/off (audio starts on; surprise audio is rude).
+  const soundButton = document.getElementById('sound-toggle');
+  if (soundButton) {
+    soundButton.addEventListener('click', () => {
+      audio.setMuted(!audio.muted);
+      soundButton.classList.toggle('muted', audio.muted);
+      soundButton.textContent = audio.muted ? 'Sound off' : 'Sound on';
+    });
+  }
 
   document.addEventListener('pointerlockchange', () => {
     const locked = document.pointerLockElement === canvas;
@@ -121,6 +190,13 @@ async function init() {
     const freecam = import.meta.env.DEV && window.__globe?.freecam.enabled;
     if (started && !freecam) {
       player.update(dt, move, mouseDelta, pad.look);
+      sequence.update(dt);
+      audio.update(dt);
+    }
+
+    // Refresh the café-through-the-door view only while approaching the exit.
+    if (started && sequence.place === 'tunnel' && camera.position.z < ENTRANCE.exitZ + 9) {
+      renderPortal();
     }
 
     renderer.render(scene, camera);

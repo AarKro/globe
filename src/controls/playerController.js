@@ -43,5 +43,14 @@ export function createPlayerController(camera, bounds, spawn) {
       camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, bounds.minZ, bounds.maxZ);
       camera.position.y = PLAYER.eyeHeight;
     },
+
+    // Hard-set the camera pose (used by the entrance sequence to drop the
+    // player into the café on arrival). Pitch is reset; yaw is optional.
+    teleport(pose) {
+      camera.position.set(pose.x, PLAYER.eyeHeight, pose.z);
+      if (typeof pose.yaw === 'number') yaw = pose.yaw;
+      pitch = 0;
+      applyOrientation();
+    },
   };
 }

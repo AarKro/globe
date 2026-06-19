@@ -15,11 +15,12 @@
 
       <div id="start" class="card hidden">
         <h1>Globe Café</h1>
-        <p>Step inside and look around.</p>
-        <button id="enter">Click to walk around</button>
+        <p>A street in Zürich. Walk to the black façade and step through the door.</p>
+        <button id="enter">Step outside</button>
         <ul class="controls-hint">
           <li><b>W A S D</b> move &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Esc</b> release mouse</li>
           <li><b>Left stick</b> move &nbsp;·&nbsp; <b>Right stick</b> look (controller)</li>
+          <li>Sound is silent outside — it begins once the tunnel door shuts behind you</li>
         </ul>
       </div>
     </div>
@@ -30,6 +31,8 @@
       <button data-theme="tokyo">Tokyo</button>
       <button data-theme="newyork">New York</button>
     </div>
+
+    <button id="sound-toggle" aria-label="Toggle sound">Sound on</button>
 
     <script type="module" src="/src/main.js"></script>
   </body>

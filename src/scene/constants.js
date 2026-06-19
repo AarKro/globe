@@ -25,3 +25,34 @@ export const LOOK = {
 };
 
 export const FOV = 72;
+
+// Entrance experience — a daytime Zürich street, a towering brutalist black
+// café façade with one door, and a round neon-ringed tunnel that transitions
+// you into the café. It lives far down the +z axis so the lit café (which the
+// camera still renders) is occluded by the tall façade and shares no light
+// with it. The player walks in -z: street -> façade door -> tunnel -> café.
+// Yaw 0 faces -z (toward the façade), so the spawn already looks at the door.
+//
+// It is fully reversible: street <-> tunnel is a real opening at the façade;
+// tunnel <-> café is a teleport portal (a matching door inside the café),
+// since the two are far apart. Audio is silent outside; see entranceAudio.js.
+export const ENTRANCE = {
+  tunnelRadius: 1.6, // interior radius of the round tunnel
+  tunnelHeight: 3.4, // height of the flat end-cap walls holding the doors
+  doorwayHalf: 0.85, // walkable half-width through a doorway and the tunnel
+  facadeZ: 42, // the café building's front, with the entry door
+  exitZ: 16, // far wall, with the exit door / café-side portal
+  streetBackZ: 66, // how far back the open street extends
+  wingHalfWidth: 50, // ground / sky / building-row half-extent in x
+  streetHalf: 3.5, // walkable half-width of the alley approaching the café
+  facadeHeight: 20, // the café building is a normal Zürich building, not a slab
+  cafeWidth: 7, // façade width of the café building (fills the alley end)
+  doorWidth: 1.9,
+  doorHeight: 2.35,
+  openDist: 3.4, // how close you get before a door swings open
+  stepLength: 0.72, // footstep cadence, in meters of travel
+  tile: 0.4, // reactive floor tile pitch
+  ringSpacing: 1.5, // neon ring spacing along the tunnel
+  ringLead: 3.5, // the lit frontier runs this far ahead of the player
+  spawn: { x: 0, z: 54, yaw: 0 },
+};
