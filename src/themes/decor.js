@@ -131,6 +131,58 @@ export function makeBulbString(from, to, { count = 12, sag = 0.3, color = 0xffd2
   return group;
 }
 
+// A vermilion torii gate — two tapered pillars, a curved upper lintel (kasagi)
+// and a straight lower beam (nuki). Built facing +z, standing on y=0.
+export function makeTorii({ height = 2.0, color = 0xd83b2a } = {}) {
+  const gate = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, roughness: 0.7 });
+  const span = height * 0.78;
+  const pillarR = height * 0.05;
+  const pillar = (x) => {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(pillarR * 0.85, pillarR, height, 12), mat);
+    p.position.set(x, height / 2, 0);
+    return p;
+  };
+  const kasagi = new THREE.Mesh(new THREE.BoxGeometry(span + pillarR * 4, height * 0.1, pillarR * 3.2), mat);
+  kasagi.position.set(0, height - height * 0.05, 0);
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(span + pillarR * 6, height * 0.05, pillarR * 2.2), mat);
+  ridge.position.set(0, height + height * 0.03, 0);
+  const nuki = new THREE.Mesh(new THREE.BoxGeometry(span + pillarR, height * 0.07, pillarR * 2), mat);
+  nuki.position.set(0, height * 0.78, 0);
+  const plaque = new THREE.Mesh(new THREE.BoxGeometry(pillarR * 2.4, height * 0.12, pillarR), mat);
+  plaque.position.set(0, height * 0.89, 0);
+  gate.add(pillar(-span / 2), pillar(span / 2), nuki, kasagi, ridge, plaque);
+  return gate;
+}
+
+// A matte metal pipe (industrial loft accent). Horizontal by default.
+export function makePipe(length, { color = 0x4a4640, radius = 0.05 } = {}) {
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, length, 12),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.7 })
+  );
+  mesh.rotation.z = Math.PI / 2;
+  return mesh;
+}
+
+// A bare warm Edison bulb on a short cord — exposed-fixture loft lighting.
+export function makeEdisonPendant({ cord = 0.5, color = 0xffd9a0 } = {}) {
+  const group = new THREE.Group();
+  const wire = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.006, 0.006, cord, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1a140e })
+  );
+  wire.position.y = -cord / 2;
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 12, 10),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.4 })
+  );
+  bulb.position.y = -cord;
+  bulb.scale.y = 1.35;
+  group.add(wire, bulb);
+  return group;
+}
+
 // A framed city-skyline silhouette picture.
 export function makeSkylinePanel({ width, height, sky = ['#2b3a5c', '#d98a4a'], buildings = '#10131c' }) {
   const cw = Math.round(width * PX_PER_METER);

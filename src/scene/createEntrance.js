@@ -25,8 +25,6 @@ const {
   facadeZ,
   exitZ,
   streetBackZ,
-  wingHalfWidth,
-  streetHalf,
   facadeHeight,
   cafeWidth,
   doorWidth,
@@ -36,8 +34,6 @@ const {
   ringSpacing,
   ringLead,
 } = ENTRANCE;
-
-const SKY_TOP = 40; // sky height (independent of the now-normal building height)
 
 const SLAB_BLACK = 0x080808;
 const TUNNEL_BLACK = 0x040404;
@@ -62,60 +58,6 @@ function gradientTexture(top, bottom) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
-}
-
-// A flat building-facade texture: base colour with a tidy grid of windows.
-const facadeTexCache = new Map();
-function facadeTexture(baseHex) {
-  if (facadeTexCache.has(baseHex)) return facadeTexCache.get(baseHex);
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = baseHex;
-  g.fillRect(0, 0, 128, 256);
-  g.fillStyle = 'rgba(30,30,40,0.85)';
-  const cols = 4;
-  const rows = 8;
-  const ww = 18;
-  const wh = 22;
-  for (let r = 0; r < rows; r++) {
-    for (let col = 0; col < cols; col++) {
-      const x = 14 + col * 26;
-      const y = 14 + r * 30;
-      g.fillRect(x, y, ww, wh);
-    }
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  facadeTexCache.set(baseHex, tex);
-  return tex;
-}
-
-// A triangular-prism gable roof, ridge running along z, sitting on y=0.
-function gableRoof(width, height, depth, color) {
-  const shape = new THREE.Shape();
-  shape.moveTo(-width / 2, 0);
-  shape.lineTo(width / 2, 0);
-  shape.lineTo(0, height);
-  shape.closePath();
-  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
-  geo.translate(0, 0, -depth / 2);
-  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }));
-}
-
-// One Altstadt townhouse: a windowed body + a gable roof.
-const ZURICH_WALLS = ['#d9cdb4', '#cdb38a', '#b7c2b0', '#c9c2bd', '#d7c7a0', '#b8c4cf', '#c8a98c'];
-const ZURICH_ROOFS = ['#7a4a3a', '#6e4636', '#83533f', '#5f4a42'];
-function townhouse(width, bodyH, depth, wallHex, roofHex) {
-  const house = new THREE.Group();
-  const bodyMat = new THREE.MeshBasicMaterial({ map: facadeTexture(wallHex) });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), bodyMat);
-  body.position.y = bodyH / 2;
-  const roof = gableRoof(width * 1.06, width * 0.5, depth * 1.04, roofHex);
-  roof.position.y = bodyH;
-  house.add(body, roof);
-  return house;
 }
 
 // A hinged door leaf with one crisp accent seam down its leading edge.
@@ -173,33 +115,18 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
   const accent = new THREE.Color(initialAccent);
   const accentTargets = [];
 
-  // ---- Daytime sky enclosure around the alley + tunnel. With the café
-  // building now low, a front backdrop (`skyFront`) on the café side fills the
-  // view over its roof with sky instead of the dark night background. The
-  // enclosure stops short of the café (z >= skyTopMinZ); the café sits beyond
-  // it and keeps its own ceiling, so daytime never reaches its interior. ----
-  const skyTop = SKY_TOP;
-  const skyBack = streetBackZ + 22;
-  const skyTopMinZ = exitZ - 4; // just café-side of the tunnel exit
-  const skyGrad = () =>
-    new THREE.MeshBasicMaterial({ map: gradientTexture('#6aa6e6', '#dfeaf3'), side: THREE.DoubleSide });
-  const skyBackPlane = new THREE.Mesh(new THREE.PlaneGeometry(wingHalfWidth * 2.4, skyTop * 1.4), skyGrad());
-  skyBackPlane.position.set(0, skyTop * 0.5, skyBack);
-  const skyFront = new THREE.Mesh(new THREE.PlaneGeometry(wingHalfWidth * 2.4, skyTop * 1.4), skyGrad());
-  skyFront.position.set(0, skyTop * 0.5, skyTopMinZ);
-  const skyL = new THREE.Mesh(new THREE.PlaneGeometry(skyBack - skyTopMinZ + 8, skyTop * 1.4), skyGrad());
-  skyL.rotation.y = Math.PI / 2;
-  skyL.position.set(-wingHalfWidth, skyTop * 0.5, (skyTopMinZ + skyBack) / 2);
-  const skyR = skyL.clone();
-  skyR.rotation.y = -Math.PI / 2;
-  skyR.position.x = wingHalfWidth;
-  const skyTopPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(wingHalfWidth * 2.4, skyBack - skyTopMinZ + 8),
-    new THREE.MeshBasicMaterial({ color: 0x6aa6e6, side: THREE.DoubleSide })
+  // ---- Daytime sky: a single seamless dome. The previous five-plane box left
+  // a dark seam over the low café roof (the night background leaked through);
+  // an inverted sphere has no edges to leak. It surrounds the whole entrance;
+  // the café (far down -z) is enclosed by its own opaque walls/ceiling/window
+  // screen, so the daytime dome never reaches its interior. ----
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(180, 32, 16),
+    new THREE.MeshBasicMaterial({ map: gradientTexture('#6aa6e6', '#dfeaf3'), side: THREE.BackSide })
   );
-  skyTopPlane.rotation.x = Math.PI / 2;
-  skyTopPlane.position.set(0, skyTop, (skyTopMinZ + skyBack) / 2);
-  group.add(skyBackPlane, skyFront, skyL, skyR, skyTopPlane);
+  skyDome.name = 'skyDome';
+  skyDome.position.set(0, 0, (facadeZ + streetBackZ) / 2);
+  group.add(skyDome);
 
   // ---- Cobbled street ground ----------------------------------------------
   const cobble = (() => {
@@ -220,16 +147,21 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
     }
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(40, 30);
+    tex.repeat.set(80, 80);
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   })();
+  // A big cobbled plane reaching the horizon in every direction, so the sky
+  // dome always meets ground (no under-horizon sky). It stops just café-side of
+  // the tunnel exit so it never z-fights the café's own floor.
+  const groundFrontZ = exitZ - 4;
+  const groundBackZ = streetBackZ + 60;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(wingHalfWidth * 2, skyBack - facadeZ + 12),
+    new THREE.PlaneGeometry(260, groundBackZ - groundFrontZ),
     new THREE.MeshBasicMaterial({ map: cobble })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0, (facadeZ + skyBack) / 2 - 3);
+  ground.position.set(0, 0, (groundFrontZ + groundBackZ) / 2);
   group.add(ground);
 
   // ---- The café building: a clean-brutalist BLACK Zürich building, normal
@@ -251,70 +183,9 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
   facade.add(fl, fr, ft, cornice, doorwayFrame(facadeZ, accentTargets, 1));
   group.add(facade);
 
-  // ---- The Zürich streetfront flanking the café across the alley end. This
-  // continuous row (not the café) is what occludes the night café / dark
-  // background, so the café can be a normal building. -----------------------
-  const endRow = new THREE.Group();
-  endRow.name = 'streetfront';
-  let es = 7;
-  const erand = () => {
-    es = (es * 9301 + 49297) % 233280;
-    return es / 233280;
-  };
-  [-1, 1].forEach((sideSign) => {
-    let x = cafeWidth / 2 + 0.15;
-    while (x < wingHalfWidth - 4) {
-      const w = 4.5 + erand() * 3;
-      const bodyH = 15 + erand() * 11;
-      const depth = 5 + erand() * 3;
-      const wall = ZURICH_WALLS[(erand() * ZURICH_WALLS.length) | 0];
-      const roof = ZURICH_ROOFS[(erand() * ZURICH_ROOFS.length) | 0];
-      const h = townhouse(w, bodyH, depth, wall, roof);
-      h.position.set(sideSign * (x + w / 2), 0, facadeZ + depth / 2);
-      endRow.add(h);
-      x += w + 0.25;
-    }
-  });
-  group.add(endRow);
-
-  // ---- Zürich Altstadt townhouses lining the street -----------------------
-  const houses = new THREE.Group();
-  houses.name = 'altstadt';
-  let seed = 7;
-  const rand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-  [-1, 1].forEach((sideSign) => {
-    let z = facadeZ + 3;
-    while (z < streetBackZ + 4) {
-      const w = 4 + rand() * 2.5;
-      const bodyH = 12 + rand() * 12;
-      const depth = 5 + rand() * 3;
-      const wall = ZURICH_WALLS[(rand() * ZURICH_WALLS.length) | 0];
-      const roof = ZURICH_ROOFS[(rand() * ZURICH_ROOFS.length) | 0];
-      const h = townhouse(w, bodyH, depth, wall, roof);
-      // Line the narrow alley: inner faces just outside the walkable width.
-      h.position.set(sideSign * (streetHalf + 0.4 + depth / 2), 0, z + w / 2);
-      h.rotation.y = sideSign > 0 ? -Math.PI / 2 : Math.PI / 2;
-      houses.add(h);
-      z += w + 0.4 + rand() * 0.6;
-    }
-  });
-  group.add(houses);
-
-  // A distant Grossmünster nod: twin square towers down the street.
-  [-7, -12.5].forEach((x, i) => {
-    const tower = new THREE.Group();
-    const shaft = slab(4.2, 30, 4.2, '#9a8f7e');
-    shaft.position.y = 15;
-    const cap = gableRoof(4.6, 3.4, 4.6, '#5d7d74');
-    cap.position.y = 30;
-    cap.rotation.y = Math.PI / 4;
-    tower.add(shaft, cap);
-    tower.position.set(x, 0, streetBackZ + 6 + i * 1.5);
-    group.add(tower);
-  });
+  // The black café building now stands alone at the alley end — the surrounding
+  // Zürich townhouses were removed for a cleaner, monolithic approach. The sky
+  // dome (not a building row) handles occlusion of the dark background.
 
   // ---- Round tunnel: dark shell, neon ring skeleton, end caps -------------
   const tunLen = facadeZ - exitZ;

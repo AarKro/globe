@@ -45,10 +45,12 @@ const INTERIOR = { minX: -5.8, maxX: 5.8, minZ: -5.8, maxZ: 5.8 };
 // ~at the wall tops, ≈ 2.39 m in room.glb).
 const CEILING_Y = 2.42;
 
-// The window opening on the -z wall (world meters) — a ribbon the street video
-// fills. And the built-in tunnel corridor's mouth on the -x wall, where the
-// entrance experience delivers the player into the café.
-const WINDOW = { cx: 1.8, cy: 1.68, z: -5.97, w: 6.0, h: 1.32 };
+// The street-video screen on the -z wall (world meters). The model's actual
+// glass cut-out is a ribbon (y ≈ 1.05..2.3), but we paint the video as a tall
+// storefront window — down the solid wall to near the floor and up to the
+// ceiling — so it reads as a big picture window rather than a thin slot. The
+// plane sits just proud of the wall; the runtime ceiling caps its top.
+const WINDOW = { cx: 1.8, cy: 1.42, z: -5.97, w: 6.0, h: 2.04 };
 const TUNNEL_MOUTH = { x: -5.9, z: 4.77 };
 
 const loader = new GLTFLoader();

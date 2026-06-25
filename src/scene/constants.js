@@ -43,7 +43,7 @@ export const ENTRANCE = {
   facadeZ: 42, // the café building's front, with the entry door
   exitZ: 16, // far wall, with the exit door / café-side portal
   streetBackZ: 66, // how far back the open street extends
-  wingHalfWidth: 50, // ground / sky / building-row half-extent in x
+  wingHalfWidth: 50, // (legacy) former building-row half-extent in x; the sky is now a dome
   streetHalf: 3.5, // walkable half-width of the alley approaching the café
   facadeHeight: 6.7, // a low café building (≈1/3 of its neighbours) at the alley end
   cafeWidth: 7, // façade width of the café building (fills the alley end)

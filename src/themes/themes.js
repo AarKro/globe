@@ -5,6 +5,9 @@ import {
   makeLantern,
   makeBulbString,
   makeSkylinePanel,
+  makeTorii,
+  makePipe,
+  makeEdisonPendant,
 } from './decor.js';
 
 // City themes. Each theme keeps the core shop untouched and contributes:
@@ -88,6 +91,51 @@ export const THEMES = {
         decor.add(banner);
       });
 
+      // A stacked neon signboard tower on the back wall — the unmistakable
+      // Shinjuku alley look: small kanji plates glowing in clashing colors.
+      const stack = [
+        { text: '酒', color: '#ff4d6d', border: '#ffd23f' },
+        { text: '麺', color: '#4dffd2', border: '#ff4d6d' },
+        { text: '茶', color: '#ffd23f', border: '#4dd2ff' },
+        { text: '酎', color: '#c77dff', border: '#7df4ff' },
+      ];
+      stack.forEach((s, i) => {
+        const plate = makeTextPanel({
+          text: s.text,
+          width: 0.62,
+          height: 0.52,
+          background: '#0c0a12',
+          color: s.color,
+          border: s.border,
+          glow: s.color,
+          fontFamily: JP_FONT,
+        });
+        plate.position.set(3.1, 2.15 - i * 0.56, BACK_WALL_Z);
+        plate.rotation.y = Math.PI;
+        decor.add(plate);
+      });
+
+      // Pink/cyan neon framing the tall street window (-z wall) so it pops.
+      const winFrame = new THREE.Group();
+      const fTop = makeNeonTube(6.0, 0xff5fa2);
+      fTop.position.set(1.8, 2.42, 0);
+      const fBot = makeNeonTube(6.0, 0x4fd8ff);
+      fBot.position.set(1.8, 0.42, 0);
+      const fL = makeNeonTube(2.0, 0x7df4ff);
+      fL.rotation.set(0, 0, 0); // vertical (cylinder is along Y by default)
+      fL.position.set(-1.2, 1.42, 0);
+      const fR = fL.clone();
+      fR.position.x = 4.8;
+      winFrame.add(fTop, fBot, fL, fR);
+      winFrame.position.set(0, 0, -5.82);
+      decor.add(winFrame);
+
+      // A vermilion torii standing in the open back-centre of the room.
+      const torii = makeTorii({ height: 2.05, color: 0xe23b2a });
+      torii.position.set(-0.3, 0, 4.4);
+      torii.rotation.y = Math.PI;
+      decor.add(torii);
+
       return decor;
     },
   },
@@ -159,6 +207,61 @@ export const THEMES = {
         makeBulbString([-6.5, 2.3, -4.2], [4.3, 2.2, -0.5], { count: 16, sag: 0.35 }),
         makeBulbString([-6.5, 2.25, 1.5], [4.3, 2.3, -2.5], { count: 16, sag: 0.3 })
       );
+
+      // Red neon "OPEN" diner sign on the back wall.
+      const open = makeTextPanel({
+        text: 'OPEN',
+        width: 1.0,
+        height: 0.42,
+        background: '#0b0908',
+        color: '#ff5a4d',
+        border: '#5ad1ff',
+        glow: '#ff5a4d',
+        fontFamily: 'Georgia, "Times New Roman", serif',
+      });
+      open.position.set(3.2, 2.05, BACK_WALL_Z);
+      open.rotation.y = Math.PI;
+      decor.add(open);
+
+      // Exposed Edison-bulb pendants on a rail down the centre of the room —
+      // the warm loft fixture that defines the look.
+      [-3.4, -1.4, 0.6].forEach((z) => {
+        const pendant = makeEdisonPendant({ cord: 0.55 });
+        pendant.position.set(-1.2, 2.3, z);
+        decor.add(pendant);
+      });
+
+      // Industrial steam pipes running along the top of the left wall.
+      const pipes = new THREE.Group();
+      const runA = makePipe(7.5, { radius: 0.06 });
+      runA.rotation.set(Math.PI / 2, 0, 0); // run along z (cylinder is along Y)
+      runA.position.set(LEFT_WALL_X + 0.12, 2.18, -1.2);
+      const runB = makePipe(7.5, { radius: 0.045, color: 0x6b4a2a });
+      runB.rotation.set(Math.PI / 2, 0, 0);
+      runB.position.set(LEFT_WALL_X + 0.12, 1.95, -1.2);
+      // A couple of elbow drops so the run reads as plumbing, not a bar.
+      [-3.6, 1.4].forEach((z) => {
+        const drop = makePipe(0.55, { radius: 0.045 });
+        drop.rotation.set(0, 0, 0); // vertical
+        drop.position.set(LEFT_WALL_X + 0.12, 1.7, z);
+        pipes.add(drop);
+      });
+      pipes.add(runA, runB);
+      decor.add(pipes);
+
+      // A green NYC street sign high on the back wall.
+      const street = makeTextPanel({
+        text: 'GLOBE AVE',
+        width: 1.4,
+        height: 0.34,
+        background: '#0a5a2f',
+        color: '#ffffff',
+        border: '#ffffff',
+        fontFamily: 'Helvetica, Arial, sans-serif',
+      });
+      street.position.set(-4.6, 2.18, BACK_WALL_Z);
+      street.rotation.y = Math.PI;
+      decor.add(street);
 
       return decor;
     },
