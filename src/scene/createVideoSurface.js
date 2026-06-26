@@ -81,5 +81,19 @@ export function createVideoSurface(meshes, { coverAspect = 0 } = {}) {
     return true;
   }
 
-  return { setSource };
+  // Seek the clip back to the start (and keep it playing). Called when the
+  // player enters the café so the street footage begins from frame 0 there,
+  // rather than wherever it had advanced to while they walked the entrance.
+  function restart() {
+    if (!video) return;
+    try {
+      video.currentTime = 0;
+      const playing = video.play();
+      if (playing?.catch) playing.catch(() => {});
+    } catch {
+      /* video not ready yet — it already starts at 0 once it loads */
+    }
+  }
+
+  return { setSource, restart };
 }

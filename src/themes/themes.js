@@ -8,6 +8,8 @@ import {
   makePipe,
   makeEdisonPendant,
   makeImagePanel,
+  makeVendingMachine,
+  makeWallClock,
   addPaperLanterns,
 } from './decor.js';
 
@@ -26,13 +28,14 @@ const NY_POSTERS = {
 //   walls and ceiling (never in the walking area)
 // Adding next month's city = one more entry here.
 
-// Mount points measured against the loaded room model (world meters,
-// interior x -7.19..4.79, z -6.0..6.0, walls ≈ 2.35 high, no ceiling
-// mesh). The back (+z) wall is glass (window) left of the counter, solid
-// near x 0. Decor sits ~0.1 m proud of the walls to avoid z-fighting.
-// Re-measure if the room GLB changes.
-const BACK_WALL_Z = 5.88;
-const LEFT_WALL_X = -7.05;
+// Wall mount lines (world meters), measured against room_without_tunnel_and_door
+// (interior x ≈ ±5.99, z ≈ ±5.9; walls ~2.4 high). Decor sits a touch proud of
+// each wall, facing into the room. Avoid: the −z window wall (street video), the
+// −x doorway band (z 3.6..5.95, the tunnel), and the bar (counter + shelves at
+// +x/+z, roughly x>2.3 & z>2.3). Re-measure if the room GLB changes.
+const BACK_WALL_Z = 5.88; // +z wall, decor faces −z (rotation.y = π)
+const LEFT_WALL_X = -5.85; // −x wall, decor faces +x (rotation.y = π/2)
+const RIGHT_WALL_X = 5.85; // +x wall, decor faces −x (rotation.y = −π/2)
 
 const JP_FONT = '"Hiragino Sans", "Yu Gothic", sans-serif';
 const NY_FONT = 'Futura, "Helvetica Neue", Arial, sans-serif';
@@ -52,79 +55,87 @@ export const THEMES = {
     },
     buildDecor() {
       const decor = new THREE.Group();
+      const plate = (text, color, border) =>
+        makeTextPanel({ text, width: 0.62, height: 0.54, background: '#0c0a12', color, border, glow: color, fontFamily: JP_FONT });
 
-      // Vertical neon sign on the clear section of the back wall.
+      // ---- BACK wall (+z): the vertical hero sign + the Japan posters --------
       const sign = makeTextPanel({
-        text: 'グローブ珈琲',
-        width: 0.5,
-        height: 1.8,
-        vertical: true,
-        background: '#14101e',
-        color: '#7df4ff',
-        border: '#ff5fa2',
-        glow: '#ff5fa2',
-        fontFamily: JP_FONT,
+        text: 'グローブ珈琲', width: 0.5, height: 1.8, vertical: true,
+        background: '#14101e', color: '#7df4ff', border: '#ff5fa2', glow: '#ff5fa2', fontFamily: JP_FONT,
       });
-      sign.position.set(-1.8, 1.3, BACK_WALL_Z);
+      sign.position.set(-0.3, 1.3, BACK_WALL_Z);
       sign.rotation.y = Math.PI;
       decor.add(sign);
 
-      // Neon tube accents along the tops of the back and left walls.
-      const backTube = makeNeonTube(6, 0xff5fa2);
-      backTube.position.set(-3, 2.28, BACK_WALL_Z - 0.02);
-      const sideTube = makeNeonTube(8, 0x4fd8ff);
-      sideTube.rotation.y = Math.PI / 2;
-      sideTube.position.set(LEFT_WALL_X, 2.28, 0);
-      decor.add(backTube, sideTube);
-
-      // Rows of paper lanterns over the seating area (the japanese_paper_lantern
-      // GLB, hung one-to-one at the old lantern positions).
-      const lanternSpots = [];
-      [-1.2, -4.0].forEach((z) => {
-        for (let x = -5; x <= 4; x += 2.25) lanternSpots.push([x, 2.0, z]);
+      [
+        { url: JP_POSTERS.japan, aspect: 673 / 952, x: -2.6 },
+        { url: JP_POSTERS.drink, aspect: 635 / 952, x: -3.85 },
+      ].forEach((p) => {
+        const h = 1.4;
+        const panel = makeImagePanel({ url: p.url, width: h * p.aspect, height: h });
+        panel.position.set(p.x, 1.45, BACK_WALL_Z);
+        panel.rotation.y = Math.PI;
+        decor.add(panel);
       });
-      addPaperLanterns(decor, lanternSpots);
 
-      // Noren-style hanging banners above the left wall bar.
+      // ---- Neon tubes rimming the tops of all three solid walls -------------
+      const backTube = makeNeonTube(7.5, 0xff5fa2);
+      backTube.position.set(-1.5, 2.32, BACK_WALL_Z - 0.02);
+      const leftTube = makeNeonTube(8.5, 0x4fd8ff);
+      leftTube.rotation.y = Math.PI / 2;
+      leftTube.position.set(LEFT_WALL_X + 0.02, 2.32, -1);
+      const rightTube = makeNeonTube(6.5, 0xffd23f);
+      rightTube.rotation.y = Math.PI / 2;
+      rightTube.position.set(RIGHT_WALL_X - 0.02, 2.32, -2.2);
+      decor.add(backTube, leftTube, rightTube);
+
+      // ---- LEFT wall (−x): noren banners, two neon plates, a vending machine -
       ['珈', '琲'].forEach((char, i) => {
-        const banner = makeTextPanel({
-          text: char,
-          width: 0.55,
-          height: 0.9,
-          background: '#a32638',
-          color: '#f3e9dc',
-          fontFamily: JP_FONT,
-        });
+        const banner = makeTextPanel({ text: char, width: 0.55, height: 0.9, background: '#a32638', color: '#f3e9dc', fontFamily: JP_FONT });
         banner.position.set(LEFT_WALL_X, 1.65, -3.4 + i * 1.1);
         banner.rotation.y = Math.PI / 2;
         decor.add(banner);
       });
-
-      // A stacked neon signboard tower on the back wall — the unmistakable
-      // Shinjuku alley look: small kanji plates glowing in clashing colors.
-      const stack = [
-        { text: '酒', color: '#ff4d6d', border: '#ffd23f' },
-        { text: '麺', color: '#4dffd2', border: '#ff4d6d' },
-        { text: '茶', color: '#ffd23f', border: '#4dd2ff' },
-        { text: '酎', color: '#c77dff', border: '#7df4ff' },
-      ];
-      stack.forEach((s, i) => {
-        const plate = makeTextPanel({
-          text: s.text,
-          width: 0.62,
-          height: 0.52,
-          background: '#0c0a12',
-          color: s.color,
-          border: s.border,
-          glow: s.color,
-          fontFamily: JP_FONT,
-        });
-        plate.position.set(3.1, 2.15 - i * 0.56, BACK_WALL_Z);
-        plate.rotation.y = Math.PI;
-        decor.add(plate);
+      [
+        { p: plate('寿司', '#ff4d6d', '#ffd23f'), z: -0.4 },
+        { p: plate('茶', '#4dffd2', '#ff4d6d'), z: 0.7 },
+      ].forEach(({ p, z }) => {
+        p.position.set(LEFT_WALL_X, 1.78, z);
+        p.rotation.y = Math.PI / 2;
+        decor.add(p);
       });
+      const vending = makeVendingMachine({ accent: 0x4fd8ff });
+      vending.position.set(LEFT_WALL_X - 0.05, 0, -4.85);
+      vending.rotation.y = Math.PI / 2;
+      decor.add(vending);
 
-      // Pink/cyan neon framing the tall street window (-z wall) so it pops.
+      // ---- RIGHT wall (+x): the stacked Shinjuku signboard + a vertical sign -
+      [
+        plate('酒', '#ff4d6d', '#ffd23f'),
+        plate('麺', '#4dffd2', '#ff4d6d'),
+        plate('茶', '#ffd23f', '#4dd2ff'),
+        plate('酎', '#c77dff', '#7df4ff'),
+      ].forEach((p, i) => {
+        p.position.set(RIGHT_WALL_X, 2.12 - i * 0.58, -3.4);
+        p.rotation.y = -Math.PI / 2;
+        decor.add(p);
+      });
+      const ramen = makeTextPanel({
+        text: 'ラーメン', width: 0.5, height: 1.5, vertical: true,
+        background: '#14101e', color: '#ffd23f', border: '#ff4d6d', glow: '#ffd23f', fontFamily: JP_FONT,
+      });
+      ramen.position.set(RIGHT_WALL_X, 1.2, -0.8);
+      ramen.rotation.y = -Math.PI / 2;
+      decor.add(ramen);
+
+      // ---- Paper lanterns (GLB) hung in three rows over the seating ---------
+      const lanternSpots = [];
+      [-1.2, -3.0, -4.6].forEach((z) => {
+        for (let x = -5; x <= 4; x += 2.25) lanternSpots.push([x, 2.0, z]);
+      });
+      addPaperLanterns(decor, lanternSpots);
+
+      // ---- Pink/cyan neon framing the tall street window (−z wall) ----------
       const winFrame = new THREE.Group();
       const fTop = makeNeonTube(6.0, 0xff5fa2);
       fTop.position.set(1.8, 2.42, 0);
@@ -139,24 +150,11 @@ export const THEMES = {
       winFrame.position.set(0, 0, -5.82);
       decor.add(winFrame);
 
-      // A vermilion torii standing in the open back-centre of the room.
+      // ---- A vermilion torii standing in the open back-centre of the room ---
       const torii = makeTorii({ height: 2.05, color: 0xe23b2a });
       torii.position.set(-0.3, 0, 4.4);
       torii.rotation.y = Math.PI;
       decor.add(torii);
-
-      // "This month: Japan" promo posters, framed on the back wall.
-      const posters = [
-        { url: JP_POSTERS.japan, aspect: 673 / 952, x: -3.4 },
-        { url: JP_POSTERS.drink, aspect: 635 / 952, x: -4.65 },
-      ];
-      posters.forEach((p) => {
-        const h = 1.4;
-        const panel = makeImagePanel({ url: p.url, width: h * p.aspect, height: h });
-        panel.position.set(p.x, 1.45, BACK_WALL_Z);
-        panel.rotation.y = Math.PI;
-        decor.add(panel);
-      });
 
       return decor;
     },
@@ -177,16 +175,11 @@ export const THEMES = {
     buildDecor() {
       const decor = new THREE.Group();
 
-      // Bulb-rimmed marquee on the clear section of the back wall.
+      // ---- BACK wall (+z): bulb marquee, the NY poster, the street sign ------
       const marquee = new THREE.Group();
       const board = makeTextPanel({
-        text: 'GLOBE CAFÉ',
-        width: 2.3,
-        height: 0.6,
-        background: '#0d0b09',
-        color: '#ffe9c9',
-        border: '#e8b86d',
-        fontFamily: NY_FONT,
+        text: 'GLOBE CAFÉ', width: 2.3, height: 0.6,
+        background: '#0d0b09', color: '#ffe9c9', border: '#e8b86d', fontFamily: NY_FONT,
       });
       marquee.add(board);
       const bulbGeo = new THREE.SphereGeometry(0.03, 8, 6);
@@ -200,96 +193,93 @@ export const THEMES = {
           marquee.add(bulb);
         });
       }
-      marquee.position.set(-1.8, 1.85, BACK_WALL_Z);
+      marquee.position.set(-1.5, 1.9, BACK_WALL_Z);
       marquee.rotation.y = Math.PI;
       decor.add(marquee);
 
-      // Subway-style station sign above the left wall bar.
-      const subway = makeTextPanel({
-        text: '● GLOBE ST STATION',
-        width: 2.2,
-        height: 0.45,
-        background: '#0a0a0a',
-        color: '#ffffff',
-        border: '#ffffff',
-        fontFamily: 'Helvetica, Arial, sans-serif',
+      const nyPoster = makeImagePanel({ url: NY_POSTERS.newyork, width: 1.6 * (1024 / 1536), height: 1.6 });
+      nyPoster.position.set(-3.9, 1.45, BACK_WALL_Z);
+      nyPoster.rotation.y = Math.PI;
+      decor.add(nyPoster);
+
+      const street = makeTextPanel({
+        text: 'GLOBE AVE', width: 1.4, height: 0.34,
+        background: '#0a5a2f', color: '#ffffff', border: '#ffffff', fontFamily: 'Helvetica, Arial, sans-serif',
       });
-      subway.position.set(LEFT_WALL_X, 1.7, -0.9);
+      street.position.set(0.9, 2.15, BACK_WALL_Z);
+      street.rotation.y = Math.PI;
+      decor.add(street);
+
+      // ---- LEFT wall (−x): subway sign, framed skyline, steam pipes ---------
+      const subway = makeTextPanel({
+        text: '● GLOBE ST STATION', width: 2.2, height: 0.45,
+        background: '#0a0a0a', color: '#ffffff', border: '#ffffff', fontFamily: 'Helvetica, Arial, sans-serif',
+      });
+      subway.position.set(LEFT_WALL_X, 1.75, -0.6);
       subway.rotation.y = Math.PI / 2;
       decor.add(subway);
 
-      // Framed Manhattan skyline at dusk, further down the same wall.
       const skyline = makeSkylinePanel({ width: 2.6, height: 1.2 });
-      skyline.position.set(LEFT_WALL_X, 1.6, -3.3);
+      skyline.position.set(LEFT_WALL_X, 1.55, -3.5);
       skyline.rotation.y = Math.PI / 2;
       decor.add(skyline);
 
-      // Warm string lights criss-crossing the ceiling above the seating.
-      decor.add(
-        makeBulbString([-6.5, 2.3, -4.2], [4.3, 2.2, -0.5], { count: 16, sag: 0.35 }),
-        makeBulbString([-6.5, 2.25, 1.5], [4.3, 2.3, -2.5], { count: 16, sag: 0.3 })
-      );
-
-      // Red neon "OPEN" diner sign on the back wall.
-      const open = makeTextPanel({
-        text: 'OPEN',
-        width: 1.0,
-        height: 0.42,
-        background: '#0b0908',
-        color: '#ff5a4d',
-        border: '#5ad1ff',
-        glow: '#ff5a4d',
-        fontFamily: 'Georgia, "Times New Roman", serif',
-      });
-      open.position.set(3.2, 2.05, BACK_WALL_Z);
-      open.rotation.y = Math.PI;
-      decor.add(open);
-
-      // Exposed Edison-bulb pendants on a rail down the centre of the room —
-      // the warm loft fixture that defines the look.
-      [-3.4, -1.4, 0.6].forEach((z) => {
-        const pendant = makeEdisonPendant({ cord: 0.55 });
-        pendant.position.set(-1.2, 2.3, z);
-        decor.add(pendant);
-      });
-
-      // Industrial steam pipes running along the top of the left wall.
       const pipes = new THREE.Group();
-      const runA = makePipe(7.5, { radius: 0.06 });
+      const runA = makePipe(8, { radius: 0.06 });
       runA.rotation.set(Math.PI / 2, 0, 0); // run along z (cylinder is along Y)
-      runA.position.set(LEFT_WALL_X + 0.12, 2.18, -1.2);
-      const runB = makePipe(7.5, { radius: 0.045, color: 0x6b4a2a });
+      runA.position.set(LEFT_WALL_X + 0.12, 2.2, -1.5);
+      const runB = makePipe(8, { radius: 0.045, color: 0x6b4a2a });
       runB.rotation.set(Math.PI / 2, 0, 0);
-      runB.position.set(LEFT_WALL_X + 0.12, 1.95, -1.2);
-      // A couple of elbow drops so the run reads as plumbing, not a bar.
-      [-3.6, 1.4].forEach((z) => {
+      runB.position.set(LEFT_WALL_X + 0.12, 1.98, -1.5);
+      [-4.2, 1.6].forEach((z) => {
         const drop = makePipe(0.55, { radius: 0.045 });
         drop.rotation.set(0, 0, 0); // vertical
-        drop.position.set(LEFT_WALL_X + 0.12, 1.7, z);
+        drop.position.set(LEFT_WALL_X + 0.12, 1.72, z);
         pipes.add(drop);
       });
       pipes.add(runA, runB);
       decor.add(pipes);
 
-      // A green NYC street sign high on the back wall.
-      const street = makeTextPanel({
-        text: 'GLOBE AVE',
-        width: 1.4,
-        height: 0.34,
-        background: '#0a5a2f',
-        color: '#ffffff',
-        border: '#ffffff',
-        fontFamily: 'Helvetica, Arial, sans-serif',
+      // ---- RIGHT wall (+x): OPEN neon, a diner clock, a COFFEE sign ---------
+      const open = makeTextPanel({
+        text: 'OPEN', width: 1.0, height: 0.42,
+        background: '#0b0908', color: '#ff5a4d', border: '#5ad1ff', glow: '#ff5a4d', fontFamily: 'Georgia, "Times New Roman", serif',
       });
-      street.position.set(-4.6, 2.18, BACK_WALL_Z);
-      street.rotation.y = Math.PI;
-      decor.add(street);
+      open.position.set(RIGHT_WALL_X, 2.0, -0.8);
+      open.rotation.y = -Math.PI / 2;
+      decor.add(open);
 
-      // "This month: New York" promo poster, framed on the back wall.
-      const nyPoster = makeImagePanel({ url: NY_POSTERS.newyork, width: 1.6 * (1024 / 1536), height: 1.6 });
-      nyPoster.position.set(-3.4, 1.45, BACK_WALL_Z);
-      nyPoster.rotation.y = Math.PI;
-      decor.add(nyPoster);
+      const clock = makeWallClock({ radius: 0.34 });
+      clock.position.set(RIGHT_WALL_X, 1.85, -2.6);
+      clock.rotation.y = -Math.PI / 2;
+      decor.add(clock);
+
+      const coffee = makeTextPanel({
+        text: 'COFFEE', width: 1.4, height: 0.4,
+        background: '#0b0908', color: '#ffb45f', border: '#ffe0b0', glow: '#ffb45f', fontFamily: NY_FONT,
+      });
+      coffee.position.set(RIGHT_WALL_X, 1.5, -4.4);
+      coffee.rotation.y = -Math.PI / 2;
+      decor.add(coffee);
+
+      // ---- Exposed Edison-bulb pendants (two columns over the seating) ------
+      [
+        { x: -1.2, zs: [-3.4, -1.4, 0.6] },
+        { x: 1.5, zs: [-2.4, -0.2] },
+      ].forEach(({ x, zs }) => {
+        zs.forEach((z) => {
+          const pendant = makeEdisonPendant({ cord: 0.55 });
+          pendant.position.set(x, 2.3, z);
+          decor.add(pendant);
+        });
+      });
+
+      // ---- Warm string lights criss-crossing the ceiling -------------------
+      decor.add(
+        makeBulbString([-6.5, 2.3, -4.2], [4.3, 2.2, -0.5], { count: 16, sag: 0.35 }),
+        makeBulbString([-6.5, 2.25, 1.5], [4.3, 2.3, -2.5], { count: 16, sag: 0.3 }),
+        makeBulbString([-6.5, 2.28, -1.2], [4.3, 2.28, 2.0], { count: 16, sag: 0.32 })
+      );
 
       return decor;
     },

@@ -210,6 +210,76 @@ export function makeEdisonPendant({ cord = 0.5, color = 0xffd9a0 } = {}) {
   return group;
 }
 
+// A glowing Japanese vending machine: a dark metal body with a backlit display
+// of drink cans on shelves and an accent trim. Floor-standing, faces +z.
+export function makeVendingMachine({ width = 0.95, height = 1.85, depth = 0.5, accent = 0xff5fa2 } = {}) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(width, height, depth),
+    new THREE.MeshStandardMaterial({ color: 0x14161c, roughness: 0.5, metalness: 0.4 })
+  );
+  body.position.y = height / 2;
+  group.add(body);
+
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 200;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f5f3ee'; // bright backlit display
+  g.fillRect(0, 0, 128, 200);
+  const cans = ['#e8443b', '#3bb0e8', '#e8c23b', '#46c46a', '#e8743b', '#9b6be0'];
+  for (let r = 0; r < 4; r++) {
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    g.fillRect(0, 10 + r * 46, 128, 4); // shelf line
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = cans[(r * 5 + i) % cans.length];
+      g.fillRect(6 + i * 20, 16 + r * 46, 14, 32);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const display = new THREE.Mesh(
+    new THREE.PlaneGeometry(width * 0.86, height * 0.66),
+    new THREE.MeshBasicMaterial({ map: tex })
+  );
+  display.position.set(0, height * 0.6, depth / 2 + 0.01);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(width * 0.9, 0.04, 0.02), new THREE.MeshBasicMaterial({ color: accent }));
+  trim.position.set(0, height * 0.24, depth / 2 + 0.02);
+  const tray = new THREE.Mesh(
+    new THREE.PlaneGeometry(width * 0.7, height * 0.12),
+    new THREE.MeshBasicMaterial({ color: 0x080808 })
+  );
+  tray.position.set(0, height * 0.12, depth / 2 + 0.011);
+  group.add(display, trim, tray);
+  return group;
+}
+
+// A round diner wall clock: pale face, dark rim, two hands. Faces +z.
+export function makeWallClock({ radius = 0.32 } = {}) {
+  const group = new THREE.Group();
+  const face = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 32),
+    new THREE.MeshStandardMaterial({ color: 0xf3ece0, roughness: 0.6, emissive: 0x3a3018, emissiveIntensity: 0.4 })
+  );
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, radius * 0.09, 10, 36),
+    new THREE.MeshStandardMaterial({ color: 0x17120c, metalness: 0.6, roughness: 0.4 })
+  );
+  rim.position.z = 0.01;
+  const handMat = new THREE.MeshBasicMaterial({ color: 0x17120c });
+  const makeHand = (len, ang) => {
+    const h = new THREE.Group();
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(len, 0.022, 0.012), handMat);
+    bar.position.x = len / 2;
+    h.add(bar);
+    h.rotation.z = ang;
+    h.position.z = 0.02;
+    return h;
+  };
+  group.add(face, rim, makeHand(radius * 0.55, Math.PI / 2 - 0.5), makeHand(radius * 0.82, Math.PI / 2 - 1.9));
+  return group;
+}
+
 // A framed picture from an image file (e.g. a promo poster). Self-lit
 // (MeshBasic) so it reads like a backlit lightbox in the dark night café.
 const textureLoader = new THREE.TextureLoader();

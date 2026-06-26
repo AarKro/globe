@@ -93,7 +93,7 @@ async function init() {
     // Handle for headless smoke tests and console tinkering.
     // freecam.enabled pauses the player controller so scripted cameras
     // (smoke tests) can position the camera without being overwritten.
-    window.__globe = { scene, camera, bounds, liveBounds, entrance, sequence, audio, THREE, freecam: { enabled: false } };
+    window.__globe = { scene, camera, bounds, liveBounds, entrance, sequence, audio, videoSurface, THREE, freecam: { enabled: false } };
   }
 
   // --- Overlay / pointer lock ----------------------------------------------
@@ -150,6 +150,7 @@ async function init() {
 
   // --- Render loop -----------------------------------------------------------
   const clock = new THREE.Clock();
+  let prevPlace = null; // to restart the street video on café entry
 
   function clamp1(v) {
     return Math.max(-1, Math.min(1, v));
@@ -175,6 +176,11 @@ async function init() {
       sequence.update(dt);
       audio.update(dt);
       if (flash) flash.style.opacity = sequence.flash.toFixed(3);
+
+      // The video plays through the whole entrance walk; restart it from the
+      // beginning the moment the player steps into the café (where the window is).
+      if (sequence.place === 'cafe' && prevPlace !== 'cafe') videoSurface.restart();
+      prevPlace = sequence.place;
     }
 
     renderer.render(scene, camera);
