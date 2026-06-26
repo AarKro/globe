@@ -73,6 +73,13 @@ async function init() {
   selectTheme(themeManager.has(savedTheme) ? savedTheme : 'tokyo');
   themeButtons.forEach((b) => b.addEventListener('click', () => selectTheme(b.dataset.theme)));
 
+  // Cycle to the next city (gamepad X button, see the render loop).
+  const themeIds = Object.keys(THEMES);
+  function cycleTheme() {
+    const next = themeIds[(themeIds.indexOf(activeTheme) + 1) % themeIds.length];
+    selectTheme(next);
+  }
+
   // The player clamps to a single mutable rect; the entrance sequence evolves
   // it (street -> tunnel -> café) and swaps in the café bounds on arrival.
   const liveBounds = { minX: -6, maxX: 6, minZ: 0, maxZ: 0 };
@@ -161,6 +168,10 @@ async function init() {
     const dt = Math.min(clock.getDelta(), 0.1);
 
     const pad = gamepad.getState();
+    // X button (standard mapping index 2) cycles the city theme. Checked before
+    // the start-overlay dismiss so the very first press just starts the
+    // experience rather than also switching themes.
+    if (started && pad.justPressed.includes(2)) cycleTheme();
     if (!started && pad.anyInput) dismissOverlay();
 
     const kbMove = keyboard.getMove();
