@@ -2,13 +2,23 @@ import * as THREE from 'three';
 import {
   makeTextPanel,
   makeNeonTube,
-  makeLantern,
   makeBulbString,
   makeSkylinePanel,
   makeTorii,
   makePipe,
   makeEdisonPendant,
+  makeImagePanel,
+  addPaperLanterns,
 } from './decor.js';
+
+// Theme poster art (Vite resolves these to hashed URLs).
+const JP_POSTERS = {
+  japan: new URL('../assets/images/japan_2.png', import.meta.url).href,
+  drink: new URL('../assets/images/japan_drink.png', import.meta.url).href,
+};
+const NY_POSTERS = {
+  newyork: new URL('../assets/images/new-york.png', import.meta.url).href,
+};
 
 // City themes. Each theme keeps the core shop untouched and contributes:
 // - `lighting`: colors/intensities applied to the existing lights
@@ -67,14 +77,13 @@ export const THEMES = {
       sideTube.position.set(LEFT_WALL_X, 2.28, 0);
       decor.add(backTube, sideTube);
 
-      // Rows of paper lanterns over the seating area.
+      // Rows of paper lanterns over the seating area (the japanese_paper_lantern
+      // GLB, hung one-to-one at the old lantern positions).
+      const lanternSpots = [];
       [-1.2, -4.0].forEach((z) => {
-        for (let x = -5; x <= 4; x += 2.25) {
-          const lantern = makeLantern(0xff6b5e, 0xff8a3c);
-          lantern.position.set(x, 2.0, z);
-          decor.add(lantern);
-        }
+        for (let x = -5; x <= 4; x += 2.25) lanternSpots.push([x, 2.0, z]);
       });
+      addPaperLanterns(decor, lanternSpots);
 
       // Noren-style hanging banners above the left wall bar.
       ['珈', '琲'].forEach((char, i) => {
@@ -135,6 +144,19 @@ export const THEMES = {
       torii.position.set(-0.3, 0, 4.4);
       torii.rotation.y = Math.PI;
       decor.add(torii);
+
+      // "This month: Japan" promo posters, framed on the back wall.
+      const posters = [
+        { url: JP_POSTERS.japan, aspect: 673 / 952, x: -3.4 },
+        { url: JP_POSTERS.drink, aspect: 635 / 952, x: -4.65 },
+      ];
+      posters.forEach((p) => {
+        const h = 1.4;
+        const panel = makeImagePanel({ url: p.url, width: h * p.aspect, height: h });
+        panel.position.set(p.x, 1.45, BACK_WALL_Z);
+        panel.rotation.y = Math.PI;
+        decor.add(panel);
+      });
 
       return decor;
     },
@@ -262,6 +284,12 @@ export const THEMES = {
       street.position.set(-4.6, 2.18, BACK_WALL_Z);
       street.rotation.y = Math.PI;
       decor.add(street);
+
+      // "This month: New York" promo poster, framed on the back wall.
+      const nyPoster = makeImagePanel({ url: NY_POSTERS.newyork, width: 1.6 * (1024 / 1536), height: 1.6 });
+      nyPoster.position.set(-3.4, 1.45, BACK_WALL_Z);
+      nyPoster.rotation.y = Math.PI;
+      decor.add(nyPoster);
 
       return decor;
     },

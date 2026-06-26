@@ -1,34 +1,36 @@
 import * as THREE from 'three';
 import { ENTRANCE } from './constants.js';
 
-// The entrance experience:
-//   - a daytime Zürich street (sky, cobbles, Altstadt townhouses),
-//   - a towering clean-brutalist BLACK café façade with a single door,
-//   - a round tunnel whose white neon rings form its skeleton: the lit zone
-//     runs ~ringLead ahead of the player and advances as they walk, so faded
-//     rings light up one by one at the frontier and stay lit behind,
-//   - a reactive floor that builds a glowing trail under footsteps,
-//   - and a matching door inside the café (the return portal).
+const LOGO_URL = new URL('../assets/images/logo_globe.png', import.meta.url).href;
+
+// The entrance experience, laid out along the -x axis and mapped onto room.glb's
+// built-in corridor (the `Cube002` stub on the café's -x wall): that corridor
+// IS the tunnel, so the whole thing is one continuous space — no teleport.
 //
-// Everything is unlit (MeshBasic / emissive color) so the global café lights
-// never touch it. The tall façade occludes the café from the street and vice
-// versa, so the daytime sky never bleeds into the night-themed café.
+//   street (sky dome + black façade)  -->  façade door  -->  the model corridor
+//   (dark, neon-ring skeleton, reactive floor)  -->  café-mouth door  -->  café.
 //
-// createEntrance({ accent, cafeBounds }) returns:
-//   { group, cafePortal, doors:{entry,exit,cafe}, arrivalPose,
-//     setAccent, resetRings, update, dispose }
+// The player walks +x. Everything here is unlit (MeshBasic / emissive) so the
+// global café lights never touch it; the 8.6 m dark corridor with a door at
+// each end keeps the daytime street out of the night café.
+//
+// createEntrance({ accent }) returns:
+//   { group, doors:{entry,cafe}, setAccent, resetRings, update, dispose }
 
 const {
-  tunnelRadius,
-  tunnelHeight,
-  doorwayHalf,
-  facadeZ,
-  exitZ,
-  streetBackZ,
+  corridorZ,
+  corridorHalf,
+  corridorHeight,
+  mouthX,
+  facadeX,
+  streetBackX,
   facadeHeight,
-  cafeWidth,
+  facadeDepth,
+  facadeZMin,
+  facadeZMax,
   doorWidth,
   doorHeight,
+  ringRadius,
   stepLength,
   tile,
   ringSpacing,
@@ -36,7 +38,6 @@ const {
 } = ENTRANCE;
 
 const SLAB_BLACK = 0x080808;
-const TUNNEL_BLACK = 0x040404;
 const DOOR_OPEN_ANGLE = 1.55;
 const DOOR_SPEED = 5.5;
 
@@ -60,7 +61,8 @@ function gradientTexture(top, bottom) {
   return tex;
 }
 
-// A hinged door leaf with one crisp accent seam down its leading edge.
+// A hinged door leaf (built in the x-y plane, hinge about +y at its -x edge)
+// with one crisp accent seam down its leading edge.
 function makeDoor(name, accentTargets) {
   const group = new THREE.Group();
   group.name = name;
@@ -91,44 +93,89 @@ function makeDoor(name, accentTargets) {
   };
 }
 
-// A crisp accent line tracing a doorway opening (jambs + head).
-function doorwayFrame(z, accentTargets, faceDir = 1) {
+// Orient a door onto an x-normal wall at `wallX`: the leaf spans z (hinge at the
+// +z side of the doorway), thin in x. The inner door still swings on its own y.
+function placeDoorX(door, wallX) {
+  const wrap = new THREE.Group();
+  wrap.rotation.y = Math.PI / 2; // local +x -> world -z
+  wrap.position.set(wallX, 0, corridorZ + doorWidth / 2);
+  wrap.add(door.group);
+  return wrap;
+}
+
+// The GLOBE logo as glowing white strokes on transparent: the source art is
+// dark line-art on white, so we invert luminance into alpha (dark → opaque
+// white, light → transparent). On the black café wall it reads as a glowing
+// sign. Drawn async once the image loads. NOTE: this assumes dark-on-light
+// source art — if LOGO_URL is later replaced with a white-on-transparent file,
+// use its texture directly instead of inverting.
+function makeGlowLogo(url, size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, 512, 512);
+    ctx.drawImage(img, 0, 0, 512, 512);
+    const d = ctx.getImageData(0, 0, 512, 512);
+    const px = d.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const lum = (px[i] + px[i + 1] + px[i + 2]) / 3;
+      px[i] = px[i + 1] = px[i + 2] = 255;
+      px[i + 3] = 255 - lum;
+    }
+    ctx.putImageData(d, 0, 0);
+    tex.needsUpdate = true;
+  };
+  img.src = url;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+  );
+  mesh.name = 'doorLogo';
+  return mesh;
+}
+
+// A crisp accent line tracing a doorway opening on an x-normal wall.
+function doorFrameX(wallX, accentTargets, faceDir = -1) {
   const group = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   accentTargets.push({ material: mat, factor: 0.6 });
   const half = doorWidth / 2;
-  const jamb = (x) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, doorHeight, 0.05), mat);
-    m.position.set(x, doorHeight / 2, z + 0.12 * faceDir);
+  const x = wallX + 0.12 * faceDir;
+  const jamb = (z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.05, doorHeight, 0.04), mat);
+    m.position.set(x, doorHeight / 2, z);
     return m;
   };
-  const head = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 0.08, 0.04, 0.05), mat);
-  head.position.set(0, doorHeight, z + 0.12 * faceDir);
-  group.add(jamb(-half - 0.02), jamb(half + 0.02), head);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, doorWidth + 0.08), mat);
+  head.position.set(x, doorHeight, corridorZ);
+  group.add(jamb(corridorZ - half - 0.02), jamb(corridorZ + half + 0.02), head);
   return group;
 }
 
-export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, tunnelMouth } = {}) {
+export function createEntrance({ accent: initialAccent = 0x4fd8ff } = {}) {
   const group = new THREE.Group();
   group.name = 'entrance';
 
   const accent = new THREE.Color(initialAccent);
   const accentTargets = [];
 
-  // ---- Daytime sky: a single seamless dome. The previous five-plane box left
-  // a dark seam over the low café roof (the night background leaked through);
-  // an inverted sphere has no edges to leak. It surrounds the whole entrance;
-  // the café (far down -z) is enclosed by its own opaque walls/ceiling/window
+  // ---- Daytime sky: a single seamless dome over the street. The café (far +x,
+  // through the corridor) is enclosed by its own opaque walls/ceiling/window
   // screen, so the daytime dome never reaches its interior. ----
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(180, 32, 16),
     new THREE.MeshBasicMaterial({ map: gradientTexture('#6aa6e6', '#dfeaf3'), side: THREE.BackSide })
   );
   skyDome.name = 'skyDome';
-  skyDome.position.set(0, 0, (facadeZ + streetBackZ) / 2);
+  skyDome.position.set((streetBackX + mouthX) / 2, 0, corridorZ);
   group.add(skyDome);
 
-  // ---- Cobbled street ground ----------------------------------------------
+  // ---- Cobbled street ground (capped at the façade so it never reaches the
+  // café/corridor floor) ----------------------------------------------------
   const cobble = (() => {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
@@ -151,111 +198,96 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   })();
-  // A big cobbled plane reaching the horizon in every direction, so the sky
-  // dome always meets ground (no under-horizon sky). It stops just café-side of
-  // the tunnel exit so it never z-fights the café's own floor.
-  const groundFrontZ = exitZ - 4;
-  const groundBackZ = streetBackZ + 60;
+  const groundMinX = streetBackX - 50;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(260, groundBackZ - groundFrontZ),
+    new THREE.PlaneGeometry(facadeX - groundMinX, 260),
     new THREE.MeshBasicMaterial({ map: cobble })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0, (groundFrontZ + groundBackZ) / 2);
+  ground.position.set((groundMinX + facadeX) / 2, 0, corridorZ);
   group.add(ground);
 
-  // ---- The café building: a clean-brutalist BLACK Zürich building, normal
-  // sized, filling the end of the alley with one door (the tunnel entry cap). -
+  // ---- The black café building: a clean-brutalist black box capping the
+  // corridor's street end (x = facadeX), with one door. Faces -x, toward the
+  // street. It spans the whole café-building footprint in z so the (low, 2.4 m)
+  // café behind it is fully occluded — the door at corridorZ makes it
+  // asymmetric. Built with depth so it reads as a building, not a wall. -------
   const facade = new THREE.Group();
   facade.name = 'facade';
   const half = doorWidth / 2;
-  const cafeSide = (cafeWidth - doorWidth) / 2;
-  const fl = slab(cafeSide, facadeHeight, 0.5);
-  fl.position.set(-(half + cafeSide / 2), facadeHeight / 2, facadeZ);
-  const fr = slab(cafeSide, facadeHeight, 0.5);
-  fr.position.set(half + cafeSide / 2, facadeHeight / 2, facadeZ);
+  const fx = facadeX + facadeDepth / 2 - 0.5; // front (street) face near facadeX
+  const leftZ0 = facadeZMin;
+  const leftZ1 = corridorZ - half;
+  const rightZ0 = corridorZ + half;
+  const rightZ1 = facadeZMax;
+  const fl = slab(facadeDepth, facadeHeight, leftZ1 - leftZ0);
+  fl.position.set(fx, facadeHeight / 2, (leftZ0 + leftZ1) / 2);
+  const fr = slab(facadeDepth, facadeHeight, rightZ1 - rightZ0);
+  fr.position.set(fx, facadeHeight / 2, (rightZ0 + rightZ1) / 2);
   const lintelH = facadeHeight - doorHeight;
-  const ft = slab(doorWidth, lintelH, 0.5);
-  ft.position.set(0, doorHeight + lintelH / 2, facadeZ);
+  const ft = slab(facadeDepth, lintelH, doorWidth);
+  ft.position.set(fx, doorHeight + lintelH / 2, corridorZ);
   // A slim cornice so it reads as a building rather than a slab.
-  const cornice = slab(cafeWidth + 0.6, 0.5, 1.0);
-  cornice.position.set(0, facadeHeight + 0.25, facadeZ + 0.25);
-  facade.add(fl, fr, ft, cornice, doorwayFrame(facadeZ, accentTargets, 1));
+  const cornice = slab(facadeDepth + 0.5, 0.5, facadeZMax - facadeZMin + 0.6);
+  cornice.position.set(fx + 0.1, facadeHeight + 0.25, (facadeZMin + facadeZMax) / 2);
+  facade.add(fl, fr, ft, cornice, doorFrameX(facadeX, accentTargets, -1));
+  // Glowing GLOBE logo above the door, on the façade's street-facing face.
+  const logo = makeGlowLogo(LOGO_URL, 1.4);
+  logo.rotation.y = -Math.PI / 2; // face -x, toward the street
+  logo.position.set(facadeX - 0.53, doorHeight + 0.95, corridorZ); // 0.03 m proud of the front face (facadeX - 0.5)
+  facade.add(logo);
   group.add(facade);
 
-  // The black café building now stands alone at the alley end — the surrounding
-  // Zürich townhouses were removed for a cleaner, monolithic approach. The sky
-  // dome (not a building row) handles occlusion of the dark background.
+  // ---- Programmed tunnel shell. The model's built-in corridor (`Cube002`) is
+  // stripped (it's a messy export that clips with the rings); this is the clean
+  // dark tube that replaces it, in the same place — from the façade to the café
+  // mouth, sized to clear the neon hoops. Ends are open (capped by the façade
+  // at the street end and the café's -x wall at the mouth). -------------------
+  const corLen = mouthX - facadeX;
+  const tunMidX = (facadeX + mouthX) / 2;
+  const tunHalfZ = ringRadius + 0.15;
+  const tunTop = corridorHeight;
+  const tunMat = new THREE.MeshBasicMaterial({ color: 0x050505, side: THREE.DoubleSide });
+  const tunnel = new THREE.Group();
+  tunnel.name = 'tunnelShell';
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(corLen, tunHalfZ * 2), tunMat);
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.set(tunMidX, tunTop, corridorZ);
+  const floorBase = new THREE.Mesh(new THREE.PlaneGeometry(corLen, tunHalfZ * 2), tunMat);
+  floorBase.rotation.x = -Math.PI / 2;
+  floorBase.position.set(tunMidX, 0, corridorZ);
+  const sideN = new THREE.Mesh(new THREE.PlaneGeometry(corLen, tunTop), tunMat);
+  sideN.position.set(tunMidX, tunTop / 2, corridorZ - tunHalfZ);
+  const sideP = new THREE.Mesh(new THREE.PlaneGeometry(corLen, tunTop), tunMat);
+  sideP.position.set(tunMidX, tunTop / 2, corridorZ + tunHalfZ);
+  tunnel.add(ceil, floorBase, sideN, sideP);
+  group.add(tunnel);
 
-  // ---- Round tunnel: dark shell, neon ring skeleton, end caps -------------
-  const tunLen = facadeZ - exitZ;
-  const tunMidZ = (facadeZ + exitZ) / 2;
-  const tunCenterY = tunnelRadius;
-
-  const shell = new THREE.Mesh(
-    new THREE.CylinderGeometry(tunnelRadius + 0.05, tunnelRadius + 0.05, tunLen, 36, 1, true),
-    new THREE.MeshBasicMaterial({ color: TUNNEL_BLACK, side: THREE.BackSide })
-  );
-  shell.rotation.x = Math.PI / 2;
-  shell.position.set(0, tunCenterY, tunMidZ);
-  group.add(shell);
-
-  // White neon rings (the skeleton). Each gets its own material so it can be
-  // lit independently; activation runs a frontier ahead of the player.
-  // 3/4 rings (270° arc) with the 90° gap centred at the bottom, where the
-  // flat floor runs — so they spring from the floor on either side. The arc
-  // draws from 0°; rotating by -45° puts its gap symmetrically at the bottom.
+  // ---- Neon ring skeleton inside the tunnel. Full hoops (in the y-z plane) the
+  // player walks through; each gets its own material so the lit frontier can run
+  // ahead of the player as they advance toward the café. ---------------------
   const rings = [];
-  const ringGeo = new THREE.TorusGeometry(tunnelRadius - 0.03, 0.035, 8, 36, Math.PI * 1.5);
-  const nRings = Math.max(2, Math.floor(tunLen / ringSpacing) - 1);
-  const ringStart = exitZ + (tunLen - (nRings - 1) * ringSpacing) / 2;
+  const ringGeo = new THREE.TorusGeometry(ringRadius, 0.035, 8, 36);
+  const ringY = corridorHeight / 2;
+  const nRings = Math.max(2, Math.floor(corLen / ringSpacing) - 1);
+  const ringStart = facadeX + (corLen - (nRings - 1) * ringSpacing) / 2;
   for (let i = 0; i < nRings; i++) {
-    const z = ringStart + i * ringSpacing;
+    const x = ringStart + i * ringSpacing;
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const ring = new THREE.Mesh(ringGeo, mat);
-    ring.position.set(0, tunCenterY, z);
-    ring.rotation.z = -Math.PI / 4;
+    ring.position.set(x, ringY, corridorZ);
+    ring.rotation.y = Math.PI / 2; // lie in the y-z plane (faces ±x)
     group.add(ring);
-    rings.push({ mat, z, activated: false, bright: 0.05 });
+    rings.push({ mat, x, activated: false, bright: 0.05 });
   }
 
-  // Exit end-cap wall (café side) + the warm café bloom behind its door.
-  const exitWall = new THREE.Group();
-  const ew = tunnelRadius + 0.4;
-  const el = slab(ew - half, tunnelHeight, 0.2);
-  el.position.set(-(half + (ew - half) / 2), tunnelHeight / 2, exitZ);
-  const er = slab(ew - half, tunnelHeight, 0.2);
-  er.position.set(half + (ew - half) / 2, tunnelHeight / 2, exitZ);
-  const etH = tunnelHeight - doorHeight;
-  const et = slab(doorWidth, etH, 0.2);
-  et.position.set(0, doorHeight + etH / 2, exitZ);
-  // Cap the round cross-section above/around the rectangular cap so no void
-  // shows through the tube's circular opening.
-  const ering = new THREE.Mesh(
-    new THREE.RingGeometry(ew, tunnelRadius + 0.1, 32),
-    new THREE.MeshBasicMaterial({ color: TUNNEL_BLACK, side: THREE.DoubleSide })
-  );
-  ering.position.set(0, tunCenterY, exitZ);
-  exitWall.add(el, er, et, ering, doorwayFrame(exitZ, accentTargets, 1));
-  group.add(exitWall);
-
-  const bloom = new THREE.Mesh(
-    new THREE.PlaneGeometry(doorWidth * 0.92, doorHeight * 0.92),
-    new THREE.MeshBasicMaterial({ color: 0xfff1d8, side: THREE.DoubleSide })
-  );
-  bloom.position.set(0, doorHeight / 2, exitZ - 0.3);
-  group.add(bloom);
-
-  // ---- Reactive floor: a soft grid that lights under footsteps -----------
-  const cols = Math.max(1, Math.floor((doorwayHalf * 2 + 0.4) / tile));
-  const rows = Math.max(1, Math.floor(tunLen / tile));
+  // ---- Reactive floor: a soft grid on the corridor floor that lights under
+  // footsteps. Sits just above the model floor to avoid z-fighting. ---------
+  const cols = Math.max(1, Math.floor((corridorHalf * 2 + 0.3) / tile));
+  const rows = Math.max(1, Math.floor(corLen / tile));
   const count = cols * rows;
-  const startX = -((cols * tile) / 2) + tile / 2;
-  const startZ = exitZ + (tunLen - rows * tile) / 2 + tile / 2;
-
-  const floorBase = slab(doorwayHalf * 2 + 0.6, 0.1, tunLen, TUNNEL_BLACK);
-  floorBase.position.set(0, -0.05, tunMidZ);
-  group.add(floorBase);
+  const startZ = corridorZ - ((cols * tile) / 2) + tile / 2;
+  const startX = facadeX + (corLen - rows * tile) / 2 + tile / 2;
 
   const floorMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(tile * 0.88, 0.04, tile * 0.88), floorMat, count);
@@ -270,9 +302,9 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
   for (let r = 0; r < rows; r++) {
     for (let cc = 0; cc < cols; cc++) {
       const i = r * cols + cc;
-      tileX[i] = startX + cc * tile;
-      tileZ[i] = startZ + r * tile;
-      m4.makeTranslation(tileX[i], 0, tileZ[i]);
+      tileX[i] = startX + r * tile;
+      tileZ[i] = startZ + cc * tile;
+      m4.makeTranslation(tileX[i], 0.03, tileZ[i]);
       tiles.setMatrixAt(i, m4);
       tiles.setColorAt(i, dark);
     }
@@ -280,45 +312,24 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
   tiles.instanceMatrix.needsUpdate = true;
   group.add(tiles);
 
-  // ---- The café-side portal: a matching black door at the mouth of the new
-  // room's built-in tunnel corridor (-x wall), so the entrance "ends up" there
-  // — you emerge through it into the café. Walking back through teleports to
-  // the procedural tunnel's exit (the two are far apart). Built facing -z
-  // around the origin, then oriented onto the -x wall (facing +x). ----------
-  const cafePortal = new THREE.Group();
-  cafePortal.name = 'cafePortal';
-  let arrivalPose = { x: 0, z: 0, yaw: 0 };
-  const mouth = tunnelMouth || (cafeBounds ? { x: 0, z: cafeBounds.maxZ } : null);
-  if (mouth) {
-    const cpFrameMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    accentTargets.push({ material: cpFrameMat, factor: 0.6 });
-    const post = (x) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.12, doorHeight + 0.1, 0.12), cpFrameMat);
-      m.position.set(x, (doorHeight + 0.1) / 2, 0);
-      return m;
-    };
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 0.34, 0.12, 0.12), cpFrameMat);
-    lintel.position.set(0, doorHeight + 0.05, 0);
-    const cafeLeaf = makeDoor('cafePortalDoor', accentTargets);
-    cafeLeaf.group.position.set(-doorWidth / 2, 0, -0.05);
-    cafePortal.add(post(-half - 0.1), post(half + 0.1), lintel, cafeLeaf.group);
-    cafePortal._door = cafeLeaf;
-    cafePortal.position.set(mouth.x, 0, mouth.z);
-    cafePortal.rotation.y = -Math.PI / 2; // -z-facing portal -> faces +x (into room)
-    cafePortal._x = mouth.x;
-    cafePortal._z = mouth.z;
-    // Arrive a step into the room from the mouth, facing +x (into the café).
-    arrivalPose = { x: mouth.x + 1.0, z: mouth.z, yaw: -Math.PI / 2 };
-  }
+  // ---- Doors: entry (street end, at the façade) and café (the corridor mouth
+  // in the café's -x wall). Both are real openings; walking through swaps the
+  // bounds, no teleport. -----------------------------------------------------
+  const doors = {
+    entry: makeDoor('entryDoor', accentTargets),
+    cafe: makeDoor('cafePortalDoor', accentTargets),
+  };
+  group.add(placeDoorX(doors.entry, facadeX));
+  group.add(placeDoorX(doors.cafe, mouthX), doorFrameX(mouthX, accentTargets, -1));
 
-  // ---- Footstep cadence + per-frame update --------------------------------
+  // ---- Accent + per-frame update ------------------------------------------
   let lastX = null;
   let lastZ = null;
   let stepAccum = 0;
   const colorScratch = new THREE.Color();
-  const RADIUS = 1.5; // wider pool so the path reads clearly
+  const RADIUS = 1.5;
   const RADIUS2 = RADIUS * RADIUS;
-  const GLOW_BIAS = 1.1; // bias the glow this far ahead, in the walk direction
+  const GLOW_BIAS = 1.1;
   const white = new THREE.Color(0xffffff);
 
   function setAccent(hex) {
@@ -333,22 +344,11 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
     });
   }
 
-  const doors = {
-    entry: makeDoor('entryDoor', accentTargets),
-    exit: makeDoor('exitDoor', accentTargets),
-    cafe: cafePortal._door || makeDoor('noopDoor', accentTargets),
-  };
-  doors.entry.group.position.set(-doorWidth / 2, 0, facadeZ);
-  doors.exit.group.position.set(-doorWidth / 2, 0, exitZ);
-  group.add(doors.entry.group, doors.exit.group);
-
   function update(dt, pos, place) {
     doors.entry.update(dt);
-    doors.exit.update(dt);
     doors.cafe.update(dt);
 
-    // Footstep accumulation + a glow centre biased ahead in the walk
-    // direction, so the path lights up before you reach it.
+    // Footstep accumulation + a glow centre biased ahead in the walk direction.
     let footstep = false;
     let glowX = pos.x;
     let glowZ = pos.z;
@@ -369,12 +369,11 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
     lastX = pos.x;
     lastZ = pos.z;
 
-    // Neon ring frontier (only while in the tunnel). A ring activates once the
-    // player is within ringLead ahead of it (and everything behind stays lit);
-    // brightness eases so rings light up one by one as the frontier passes.
+    // Neon ring frontier (only in the corridor). A ring activates once the
+    // player is within ringLead before it (café-ward is +x); behind stays lit.
     if (place === 'tunnel') {
       for (const r of rings) {
-        if (pos.z - r.z <= ringLead) r.activated = true;
+        if (pos.x >= r.x - ringLead) r.activated = true;
       }
     }
     for (const r of rings) {
@@ -404,17 +403,15 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff, cafeBounds, t
   }
 
   function dispose() {
-    [group, cafePortal].forEach((g) =>
-      g.traverse((o) => {
-        o.geometry?.dispose();
-        const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-        mats.forEach((m) => {
-          m.map?.dispose();
-          m.dispose();
-        });
-      })
-    );
+    group.traverse((o) => {
+      o.geometry?.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      mats.forEach((m) => {
+        m.map?.dispose();
+        m.dispose();
+      });
+    });
   }
 
-  return { group, cafePortal, bloom, doors, arrivalPose, setAccent, resetRings, update, dispose };
+  return { group, doors, setAccent, resetRings, update, dispose };
 }

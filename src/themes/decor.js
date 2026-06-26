@@ -1,7 +1,34 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Shared building blocks for theme decor. Everything is procedural —
 // primitives + canvas textures — so themes need no extra model assets.
+
+// Paper-lantern GLB (replaces the procedural makeLantern). Hung at each [x,y,z],
+// normalized so each lantern is `height` m tall and centred on its position.
+// Async (GLB load), and loaded fresh per call so theme-switch disposal stays
+// clean (clones share this load's resources, which are disposed with the decor
+// group). Skips populating if the decor group was already removed mid-load.
+const lanternLoader = new GLTFLoader();
+const LANTERN_URL = new URL('../assets/models/japanese_paper_lantern.glb', import.meta.url).href;
+export function addPaperLanterns(decor, positions, { height = 0.5 } = {}) {
+  lanternLoader.load(LANTERN_URL, (gltf) => {
+    if (!decor.parent) return; // theme switched away before the model loaded
+    const src = gltf.scene;
+    const box = new THREE.Box3().setFromObject(src);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const s = height / size.y;
+    positions.forEach(([x, y, z]) => {
+      const lantern = src.clone();
+      lantern.name = 'paperLantern';
+      lantern.scale.setScalar(s);
+      // Recenter the model's bounding box onto (x, y, z).
+      lantern.position.set(x - center.x * s, y - center.y * s, z - center.z * s);
+      decor.add(lantern);
+    });
+  });
+}
 
 const PX_PER_METER = 300;
 
@@ -180,6 +207,26 @@ export function makeEdisonPendant({ cord = 0.5, color = 0xffd9a0 } = {}) {
   bulb.position.y = -cord;
   bulb.scale.y = 1.35;
   group.add(wire, bulb);
+  return group;
+}
+
+// A framed picture from an image file (e.g. a promo poster). Self-lit
+// (MeshBasic) so it reads like a backlit lightbox in the dark night café.
+const textureLoader = new THREE.TextureLoader();
+export function makeImagePanel({ url, width, height, frame = '#15100a', frameDepth = 0.05 }) {
+  const group = new THREE.Group();
+  const tex = textureLoader.load(url);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const picture = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: tex })
+  );
+  const frameMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(width + 0.08, height + 0.08, frameDepth),
+    new THREE.MeshStandardMaterial({ color: frame, roughness: 0.6 })
+  );
+  frameMesh.position.z = -frameDepth / 2 - 0.005;
+  group.add(frameMesh, picture);
   return group;
 }
 

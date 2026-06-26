@@ -14,7 +14,10 @@ const ROOM_SCALE = 5;
 // (The original's merged chair meshes were 'pCube427_coffeechair_0' and
 // 'pCylinder383_coffeechair1_0' — keep the mechanism in case a future
 // room ships furniture again.)
-const STRIP_MESH_NAMES = [];
+// The model's built-in corridor tube (`Cube002`, the -x-wall stub) is a messy
+// export that clips with the clean programmed tunnel mapped onto it — strip it
+// and let createEntrance build a clean dark tunnel shell in the same place.
+const STRIP_MESH_NAMES = ['Cube002'];
 
 // Each wooden table set (table + four stools + lamp) is normalized to this
 // horizontal footprint, café-table sized so several fit in the room.
@@ -141,9 +144,46 @@ export async function createGltfRoom() {
   windowScreen.name = 'windowScreen';
   windowScreen.position.set(WINDOW.cx, WINDOW.cy, WINDOW.z);
 
+  // Blackout panels over the -x wall. That wall has a row of window/arch
+  // openings (z ≈ -4.5, -1, 2.5..3.5, 6.5..8) plus the built-in corridor mouth
+  // (z ≈ 3.68..5.86, where the entrance now connects). The openings used to
+  // show the dark background, but the entrance's daytime sky dome encloses the
+  // whole scene, so they'd leak daylight into the night café. Seal everything
+  // except the corridor band with two dark panels (the corridor stays open as
+  // the tunnel into the café). Re-measure CORRIDOR_BAND if the room GLB changes.
+  // The café's -x wall has a corridor mouth (z ≈ 3.6..5.95) and the other walls
+  // have glass/window openings, so daylight would leak through. Box the café in
+  // dark "night sky" backdrop panels just outside its walls — reading as dark
+  // night beyond the glass. Openings kept: the -z storefront window
+  // (windowScreen) and the -x corridor mouth (the tunnel in). Re-measure
+  // CORRIDOR_BAND / the panel z-extents if the room GLB changes.
+  const CORRIDOR_BAND = { min: 3.6, max: 5.95 };
+  const backH = CEILING_Y + 0.6;
+  const back = (name, w, ry, x, z) => {
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, backH),
+      new THREE.MeshBasicMaterial({ color: 0x05060a, side: THREE.DoubleSide })
+    );
+    panel.name = name;
+    panel.rotation.y = ry;
+    panel.position.set(x, backH / 2, z);
+    return panel;
+  };
+  // -x wall: two panels flanking the corridor mouth, within the café's
+  // z-footprint (≈ -6.1..6.1) so they don't poke past the entrance façade.
+  const xWall = INTERIOR.minX - 0.12;
+  const sealA = back('xWallSealLeft', CORRIDOR_BAND.min - (INTERIOR.minZ - 0.3), Math.PI / 2, xWall, (INTERIOR.minZ - 0.3 + CORRIDOR_BAND.min) / 2);
+  const sealB = back('xWallSealRight', INTERIOR.maxZ + 0.4 - CORRIDOR_BAND.max, Math.PI / 2, xWall, (CORRIDOR_BAND.max + INTERIOR.maxZ + 0.4) / 2);
+  // The other walls: dark backdrops just outside, behind the glass.
+  const xWide = INTERIOR.maxX - INTERIOR.minX + 4;
+  const zWide = INTERIOR.maxZ - INTERIOR.minZ + 4;
+  const sealBack = back('zWallSealBack', xWide, Math.PI, 0, INTERIOR.maxZ + 0.3); // +z back (glass) wall
+  const sealFront = back('zWallSealFront', xWide, 0, 0, INTERIOR.minZ - 0.3); // -z, behind the window
+  const sealPosX = back('xWallSealFar', zWide, -Math.PI / 2, INTERIOR.maxX + 0.3, 0); // +x wall
+
   const room = new THREE.Group();
   room.name = 'room';
-  room.add(shell, furniture, ceiling, windowScreen);
+  room.add(shell, furniture, ceiling, windowScreen, sealA, sealB, sealBack, sealFront, sealPosX);
 
   const m = PLAYER.boundsMargin;
   const bounds = {

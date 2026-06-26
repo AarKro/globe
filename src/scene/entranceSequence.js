@@ -1,38 +1,44 @@
 import { ENTRANCE } from './constants.js';
 
-// Reversible place machine for the entrance: street <-> tunnel <-> café.
+// Reversible place machine for the continuous entrance: street <-> tunnel <->
+// café, all laid out along +x with no teleport. Both thresholds are real
+// openings — bounds swap as the door swings:
 //
-//   street <-> tunnel : a real opening at the façade — bounds swap at the
-//                       threshold, no teleport. Entering from the street arms
-//                       the audio "hush then swell".
-//   tunnel <-> café   : the two are far apart, so a teleport portal bridges
-//                       the tunnel's exit door and a matching door in the café.
+//   street <-> tunnel : the façade door at facadeX. Entering from the street
+//                       arms the audio "hush then swell" and replays the rings.
+//   tunnel <-> café   : the door at the corridor mouth (mouthX) in the café's
+//                       -x wall. Music carries straight across.
 //
-// Owns the single mutable `liveBounds` rect the player clamps to, opens doors
-// by proximity, and drives the audio place/intensity. The player walks in -z,
-// so the forward (café-ward) limit is liveBounds.minZ.
+// Owns the single mutable `liveBounds` rect the player clamps to, opens doors by
+// proximity, and drives the audio place/intensity. The player walks +x, so the
+// café-ward limit is liveBounds.maxX and the corridor cross-axis is z.
 
-const { facadeZ, exitZ, streetBackZ, streetHalf, doorwayHalf, openDist } = ENTRANCE;
+const {
+  corridorZ,
+  corridorHalf,
+  streetHalf,
+  mouthX,
+  facadeX,
+  streetBackX,
+  openDist,
+} = ENTRANCE;
 
-const STREET = { minX: -streetHalf, maxX: streetHalf, minZ: facadeZ + 0.6, maxZ: streetBackZ - 0.5 };
+const STREET = {
+  minX: streetBackX + 0.5,
+  maxX: facadeX - 0.6,
+  minZ: corridorZ - streetHalf,
+  maxZ: corridorZ + streetHalf,
+};
 
-export function createEntranceSequence({ entrance, audio, camera, player, liveBounds, cafeBounds }) {
+export function createEntranceSequence({ entrance, audio, camera, liveBounds, cafeBounds }) {
   let place = 'street';
-  let pendingClose = false; // awaiting the entry door to shut behind us
-  let flash = 0; // 0..1 warm-bloom overlay that masks the teleport cut
-  let cafeArmed = false; // arms café->tunnel only after you step away from the portal
+  let pendingClose = false; // awaiting the façade door to shut behind us
   Object.assign(liveBounds, STREET);
-
-  // Pose to drop into when stepping from the café back into the tunnel: at the
-  // exit end, facing +z up the tunnel toward the street.
-  const tunnelReturnPose = { x: 0, z: exitZ + 1.3, yaw: Math.PI };
-  const portalX = entrance.cafePortal?._x ?? 0;
-  const portalZ = entrance.cafePortal?._z ?? cafeBounds.maxZ;
 
   function toStreet() {
     place = 'street';
     pendingClose = false;
-    Object.assign(liveBounds, STREET);
+    Object.assign(liveBounds, STREET, { maxX: facadeX + 1.2 });
     audio.setPlace('street');
   }
   function toTunnelFromStreet() {
@@ -45,19 +51,20 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
   function toTunnelFromCafe() {
     place = 'tunnel';
     pendingClose = false;
-    flash = 1; // white-out covers the cut
-    player.teleport(tunnelReturnPose);
-    Object.assign(liveBounds, { minX: -doorwayHalf, maxX: doorwayHalf, minZ: exitZ + 0.6, maxZ: facadeZ - 0.5 });
     audio.setPlace('tunnel');
     audio.armHush(0); // coming from the café, music carries straight over
   }
   function toCafe() {
     place = 'cafe';
     pendingClose = false;
-    cafeArmed = false; // don't immediately re-trigger at the arrival spot
-    flash = 1; // white-out covers the cut
-    player.teleport(entrance.arrivalPose);
-    Object.assign(liveBounds, cafeBounds);
+    // Start in the mouth channel so the clamp doesn't shove us off the
+    // threshold; the café case widens to the full rect once we step away.
+    Object.assign(liveBounds, {
+      minX: mouthX - 1.2,
+      maxX: cafeBounds.maxX,
+      minZ: corridorZ - corridorHalf,
+      maxZ: corridorZ + corridorHalf,
+    });
     audio.setPlace('cafe');
   }
 
@@ -66,36 +73,36 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
       return place;
     },
     get flash() {
-      return flash;
+      return 0; // continuous space — no teleport white-out
     },
     update(dt) {
       const pos = camera.position;
       const { footstep } = entrance.update(dt, pos, place);
-      flash *= Math.exp(-dt * 3.2); // fade any active bloom; ramps/cuts re-raise it
+      const inBand = Math.abs(pos.z - corridorZ) < corridorHalf;
 
       switch (place) {
         case 'street': {
-          const open = pos.z < facadeZ + openDist;
+          const open = pos.x > facadeX - openDist;
           entrance.doors.entry.open(open);
-          const through = entrance.doors.entry.ratio > 0.55 && Math.abs(pos.x) < doorwayHalf + 0.05;
-          liveBounds.minX = -streetHalf;
-          liveBounds.maxX = streetHalf;
-          liveBounds.maxZ = streetBackZ - 0.5;
-          liveBounds.minZ = through ? facadeZ - 1.2 : facadeZ + 0.6;
-          if (pos.z < facadeZ - 0.4) {
+          const through = entrance.doors.entry.ratio > 0.55 && Math.abs(pos.z - corridorZ) < corridorHalf + 0.05;
+          liveBounds.minX = STREET.minX;
+          liveBounds.minZ = STREET.minZ;
+          liveBounds.maxZ = STREET.maxZ;
+          liveBounds.maxX = through ? facadeX + 1.2 : facadeX - 0.6;
+          if (pos.x > facadeX + 0.4) {
             toTunnelFromStreet();
-            liveBounds.minX = -doorwayHalf;
-            liveBounds.maxX = doorwayHalf;
+            liveBounds.minZ = corridorZ - corridorHalf;
+            liveBounds.maxZ = corridorZ + corridorHalf;
           }
           break;
         }
         case 'tunnel': {
           if (footstep) audio.footstep();
 
-          // Entry door (street end): opens when you approach it from inside.
-          const entryNear = pos.z > facadeZ - openDist;
+          // Façade door (street end): opens when you approach it from inside.
+          const entryNear = pos.x < facadeX + openDist;
           entrance.doors.entry.open(entryNear);
-          const entryThrough = entrance.doors.entry.ratio > 0.55 && Math.abs(pos.x) < doorwayHalf + 0.05;
+          const entryThrough = entrance.doors.entry.ratio > 0.55 && inBand;
 
           // The moment it has shut behind you: clunk, then the hush begins.
           if (pendingClose && entrance.doors.entry.ratio < 0.08) {
@@ -104,38 +111,38 @@ export function createEntranceSequence({ entrance, audio, camera, player, liveBo
             pendingClose = false;
           }
 
-          // Exit door (café end).
-          const exitNear = pos.z < exitZ + openDist;
-          entrance.doors.exit.open(exitNear);
-          const exitThrough = entrance.doors.exit.ratio > 0.55;
+          // Café-mouth door.
+          const cafeNear = pos.x > mouthX - openDist;
+          entrance.doors.cafe.open(cafeNear);
+          const cafeThrough = entrance.doors.cafe.ratio > 0.55 && inBand;
 
-          // As you step through the open exit, the warm café light floods in,
-          // peaking at the cut so the teleport is hidden inside the bloom.
-          if (exitThrough) flash = Math.max(flash, Math.min(1, (exitZ + 1.4 - pos.z) / 1.6));
+          liveBounds.minZ = corridorZ - corridorHalf;
+          liveBounds.maxZ = corridorZ + corridorHalf;
+          liveBounds.minX = entryThrough ? facadeX - 1.2 : facadeX + 0.5;
+          liveBounds.maxX = cafeThrough ? mouthX + 1.2 : mouthX - 0.6;
 
-          liveBounds.minX = -doorwayHalf;
-          liveBounds.maxX = doorwayHalf;
-          liveBounds.maxZ = entryThrough ? facadeZ + 1.2 : facadeZ - 0.5;
-          liveBounds.minZ = exitThrough ? exitZ - 1.2 : exitZ + 0.6;
+          audio.setIntensity((pos.x - facadeX) / (mouthX - facadeX));
 
-          audio.setIntensity((facadeZ - pos.z) / (facadeZ - exitZ));
-
-          if (pos.z > facadeZ + 0.4) toStreet();
-          else if (pos.z < exitZ - 0.3) toCafe();
+          if (pos.x < facadeX - 0.4) toStreet();
+          else if (pos.x > mouthX + 0.4) toCafe();
           break;
         }
         case 'cafe': {
           if (footstep) audio.footstep();
-          // The portal sits at the built-in tunnel-corridor mouth; trigger by
-          // proximity (orientation-agnostic), with the bloom building as you
-          // reach it.
-          const d = Math.hypot(pos.x - portalX, pos.z - portalZ);
-          if (d > openDist) cafeArmed = true; // stepped away — now it can re-fire
-          entrance.doors.cafe.open(cafeArmed && d < openDist);
-          if (cafeArmed && entrance.doors.cafe.ratio > 0.5) {
-            flash = Math.max(flash, Math.min(1, (openDist - d) / openDist));
-          }
-          if (cafeArmed && d < 0.7) toTunnelFromCafe();
+
+          // Open a channel through the -x wall back into the corridor when you
+          // reach the mouth's z-band; clamp to the band there so you can't pass
+          // through solid wall elsewhere.
+          const approachingMouth = pos.x < mouthX + openDist + 0.5 && Math.abs(pos.z - corridorZ) < corridorHalf + 0.4;
+          entrance.doors.cafe.open(approachingMouth);
+          const through = entrance.doors.cafe.ratio > 0.55 && inBand;
+
+          liveBounds.minX = through ? mouthX - 1.2 : cafeBounds.minX;
+          liveBounds.maxX = cafeBounds.maxX;
+          liveBounds.minZ = through ? corridorZ - corridorHalf : cafeBounds.minZ;
+          liveBounds.maxZ = through ? corridorZ + corridorHalf : cafeBounds.maxZ;
+
+          if (pos.x < mouthX - 0.3) toTunnelFromCafe();
           break;
         }
       }

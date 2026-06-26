@@ -25,7 +25,7 @@ const hint = document.getElementById('hint');
 async function init() {
   const { scene, camera, renderer } = createScene(canvas);
 
-  const { room, bounds, windowScreen, tunnelMouth } = await createGltfRoom();
+  const { room, bounds, windowScreen } = await createGltfRoom();
   scene.add(room);
   const lights = createLights(bounds);
   scene.add(lights);
@@ -35,8 +35,8 @@ async function init() {
   // the entrance accent and audio. Lives far down +z; the player spawns here
   // and is teleported into the café on arrival.
   const themeAccent = (id) => THEMES[id]?.lighting.lampColors[0] ?? 0x4fd8ff;
-  const entrance = createEntrance({ cafeBounds: bounds, tunnelMouth });
-  scene.add(entrance.group, entrance.cafePortal);
+  const entrance = createEntrance();
+  scene.add(entrance.group);
   const audio = createEntranceAudio();
 
   // Street video filling the café window, switched with the city theme — look
