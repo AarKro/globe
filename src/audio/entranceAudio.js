@@ -1,7 +1,7 @@
 // Entrance ambience, gated by WHERE the player is:
 //   - street : silent (you hear nothing outside)
-//   - tunnel : enter from the street, the door shuts, ~1.6 s of silence, then
-//              the music fades in low and swells louder toward the café
+//   - tunnel : the music fades in the moment you step in — near-silent at the
+//              street end, swelling louder as you walk toward the café
 //   - café   : the music plays at a steady, present level
 //
 // The music itself is an audio FILE when one is available, falling back to a

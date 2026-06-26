@@ -21,7 +21,7 @@ const STRIP_MESH_NAMES = [];
 
 // Each wooden table set (table + four stools + lamp) is normalized to this
 // horizontal footprint, café-table sized so several fit in the room.
-const TABLE_SET_FOOTPRINT = 2.2;
+const TABLE_SET_FOOTPRINT = 1.76;
 
 // Where the table sets stand (world meters, y = floor) and how they're
 // turned. Spots keep the spawn corner, the counter approach (z > 3) and
@@ -32,7 +32,7 @@ const TABLE_SET_PLACEMENTS = [
   { x: 2.2, z: -3.8, rotY: 1.6 },
   { x: -5.2, z: 0.2, rotY: 2.3 },
   { x: -1.6, z: -0.6, rotY: -0.2 },
-  { x: 2.0, z: 0.3, rotY: 0.9 },
+  { x: 2.0, z: -1.46, rotY: 0.9 },
 ];
 
 const FLOOR_MESH_NAME = 'group1pasted__pPlane180_FLOOR_0';

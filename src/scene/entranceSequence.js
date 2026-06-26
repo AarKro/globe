@@ -43,10 +43,12 @@ export function createEntranceSequence({ entrance, audio, camera, liveBounds, ca
   }
   function toTunnelFromStreet() {
     place = 'tunnel';
-    pendingClose = true; // hush + clunk fire once the door shuts behind us
+    pendingClose = true; // door-close clunk fires once the door shuts behind us
     entrance.resetRings();
     audio.setPlace('tunnel');
-    audio.hold(); // silent until the door closes
+    // Music swells in immediately on stepping into the tunnel — no hold/hush.
+    // It starts near-silent (swell ~0.04 at the façade) and rises toward the café.
+    audio.armHush(0);
   }
   function toTunnelFromCafe() {
     place = 'tunnel';
@@ -104,10 +106,10 @@ export function createEntranceSequence({ entrance, audio, camera, liveBounds, ca
           entrance.doors.entry.open(entryNear);
           const entryThrough = entrance.doors.entry.ratio > 0.55 && inBand;
 
-          // The moment it has shut behind you: clunk, then the hush begins.
+          // The moment it has shut behind you: a satisfying door-close clunk
+          // (the music is already swelling in, so no hush here).
           if (pendingClose && entrance.doors.entry.ratio < 0.08) {
             audio.doorClose();
-            audio.armHush();
             pendingClose = false;
           }
 
