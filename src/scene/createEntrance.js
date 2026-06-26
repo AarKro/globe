@@ -63,7 +63,7 @@ function gradientTexture(top, bottom) {
 
 // A hinged door leaf (built in the x-y plane, hinge about +y at its -x edge)
 // with one crisp accent seam down its leading edge.
-function makeDoor(name, accentTargets) {
+function makeDoor(name, accentTargets, rims) {
   const group = new THREE.Group();
   group.name = name;
   const leaf = slab(doorWidth, doorHeight, 0.08, 0x0a0a0a);
@@ -75,6 +75,7 @@ function makeDoor(name, accentTargets) {
   const seam = new THREE.Mesh(new THREE.BoxGeometry(0.025, doorHeight * 0.78, 0.1), seamMat);
   seam.position.set(doorWidth - 0.09, doorHeight / 2, 0.02);
   group.add(seam);
+  rims?.push(seam);
 
   let ratio = 0;
   let target = 0;
@@ -139,10 +140,11 @@ function makeGlowLogo(url, size) {
 }
 
 // A crisp accent line tracing a doorway opening on an x-normal wall.
-function doorFrameX(wallX, accentTargets, faceDir = -1) {
+function doorFrameX(wallX, accentTargets, faceDir = -1, rims) {
   const group = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   accentTargets.push({ material: mat, factor: 0.6 });
+  rims?.push(group);
   const half = doorWidth / 2;
   const x = wallX + 0.12 * faceDir;
   const jamb = (z) => {
@@ -162,6 +164,12 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff } = {}) {
 
   const accent = new THREE.Color(initialAccent);
   const accentTargets = [];
+  // Door neon rims (frame + leaf seam), grouped per door. A door's rim shows
+  // only when it's shut and viewed from outside the tunnel (street / café); it
+  // hides the moment the door starts opening (so you don't see a lit rim through
+  // the doorway) and whenever the player is inside the tunnel (pure black).
+  const entryRims = [];
+  const cafeRims = [];
 
   // ---- Daytime sky: a single seamless dome over the street. The café (far +x,
   // through the corridor) is enclosed by its own opaque walls/ceiling/window
@@ -230,7 +238,7 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff } = {}) {
   // A slim cornice so it reads as a building rather than a slab.
   const cornice = slab(facadeDepth + 0.5, 0.5, facadeZMax - facadeZMin + 0.6);
   cornice.position.set(fx + 0.1, facadeHeight + 0.25, (facadeZMin + facadeZMax) / 2);
-  facade.add(fl, fr, ft, cornice, doorFrameX(facadeX, accentTargets, -1));
+  facade.add(fl, fr, ft, cornice, doorFrameX(facadeX, accentTargets, -1, entryRims));
   // Glowing GLOBE logo above the door, on the façade's street-facing face.
   const logo = makeGlowLogo(LOGO_URL, 1.4);
   logo.rotation.y = -Math.PI / 2; // face -x, toward the street
@@ -316,11 +324,11 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff } = {}) {
   // in the café's -x wall). Both are real openings; walking through swaps the
   // bounds, no teleport. -----------------------------------------------------
   const doors = {
-    entry: makeDoor('entryDoor', accentTargets),
-    cafe: makeDoor('cafePortalDoor', accentTargets),
+    entry: makeDoor('entryDoor', accentTargets, entryRims),
+    cafe: makeDoor('cafePortalDoor', accentTargets, cafeRims),
   };
   group.add(placeDoorX(doors.entry, facadeX));
-  group.add(placeDoorX(doors.cafe, mouthX), doorFrameX(mouthX, accentTargets, -1));
+  group.add(placeDoorX(doors.cafe, mouthX), doorFrameX(mouthX, accentTargets, -1, cafeRims));
 
   // ---- Accent + per-frame update ------------------------------------------
   let lastX = null;
@@ -347,6 +355,15 @@ export function createEntrance({ accent: initialAccent = 0x4fd8ff } = {}) {
   function update(dt, pos, place) {
     doors.entry.update(dt);
     doors.cafe.update(dt);
+
+    // Both doors' rims hide as soon as *either* door starts opening (so no lit
+    // rim shows through the open doorway, near or far) and whenever inside the
+    // tunnel (pure black). They show only when both doors are shut and the
+    // player is outside the tunnel.
+    const anyDoorOpening = doors.entry.ratio > 0.02 || doors.cafe.ratio > 0.02;
+    const showRims = place !== 'tunnel' && !anyDoorOpening;
+    for (const r of entryRims) r.visible = showRims;
+    for (const r of cafeRims) r.visible = showRims;
 
     // Footstep accumulation + a glow centre biased ahead in the walk direction.
     let footstep = false;

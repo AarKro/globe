@@ -39,12 +39,13 @@ export const FOV = 72;
 // corridor with a door at each end keeps the daytime street out of the night
 // café. Audio is silent outside; see entranceAudio.js.
 export const ENTRANCE = {
-  corridorZ: 4.77, // world-z centre line of the model corridor (Cube002)
+  corridorZ: 4.77, // world-z centre line of the corridor doorway in the model
   corridorHalf: 0.82, // walkable half-width across the corridor (in z)
-  corridorHeight: 2.19, // model corridor interior height
-  mouthX: -6.0, // café end of the corridor — the door into the café
-  facadeX: -14.6, // street end of the corridor — façade + entry door
-  streetBackX: -31, // how far back (-x) the open street extends
+  corridorHeight: 2.19, // corridor interior height
+  mouthX: -6.0, // café end of the corridor — the door into the café (fixed)
+  facadeX: -23.2, // street end of the corridor — façade + entry door. 17.2 m from
+  // the mouth (2× the original 8.6 m) — the café end stays put, the façade moves out.
+  streetBackX: -39.6, // how far back (-x) the open street extends (shifted with the façade)
   streetHalf: 2.5, // walkable half-width of the street alley (in z) — keeps the
   // player on-axis so the façade always occludes the café building behind it
   facadeHeight: 6.7, // height of the black café building at the street end
@@ -62,5 +63,5 @@ export const ENTRANCE = {
   tile: 0.4, // reactive floor tile pitch
   ringSpacing: 1.4, // neon ring spacing along the corridor
   ringLead: 3.2, // the lit frontier runs this far ahead of the player
-  spawn: { x: -28, z: 4.77, yaw: -Math.PI / 2 }, // on the street, facing +x toward the café
+  spawn: { x: -36.6, z: 4.77, yaw: -Math.PI / 2 }, // on the street, facing +x toward the café
 };

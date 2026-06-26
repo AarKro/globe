@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAYER } from './constants.js';
 
-const ROOM_URL = new URL('../assets/models/room.glb', import.meta.url).href;
+const ROOM_URL = new URL('../assets/models/room_without_tunnel_and_door.glb', import.meta.url).href;
 const TABLE_SET_URL = new URL('../assets/models/wooden_table_set.glb', import.meta.url).href;
 
 // The source model is ~2.9 units across with a 0.48-unit ceiling; this
@@ -14,10 +14,10 @@ const ROOM_SCALE = 5;
 // (The original's merged chair meshes were 'pCube427_coffeechair_0' and
 // 'pCylinder383_coffeechair1_0' — keep the mechanism in case a future
 // room ships furniture again.)
-// The model's built-in corridor tube (`Cube002`, the -x-wall stub) is a messy
-// export that clips with the clean programmed tunnel mapped onto it — strip it
-// and let createEntrance build a clean dark tunnel shell in the same place.
-const STRIP_MESH_NAMES = ['Cube002'];
+// room_without_tunnel_and_door.glb already omits the built-in corridor tube and
+// door leaf, leaving a clean doorway opening in the -x wall — createEntrance's
+// programmed tunnel + door connect through it. Nothing to strip.
+const STRIP_MESH_NAMES = [];
 
 // Each wooden table set (table + four stools + lamp) is normalized to this
 // horizontal footprint, café-table sized so several fit in the room.
@@ -157,7 +157,11 @@ export async function createGltfRoom() {
   // night beyond the glass. Openings kept: the -z storefront window
   // (windowScreen) and the -x corridor mouth (the tunnel in). Re-measure
   // CORRIDOR_BAND / the panel z-extents if the room GLB changes.
-  const CORRIDOR_BAND = { min: 3.6, max: 5.95 };
+  // min is set to the café-door's -z edge (≈3.95): the model doorway opening is
+  // a touch wider on the -z side than the door covers, so without this the café
+  // shows through a sliver to the left of the closed door. Extending the seal
+  // (a dark backdrop just behind the wall) up to the door edge covers it.
+  const CORRIDOR_BAND = { min: 3.95, max: 5.95 };
   const backH = CEILING_Y + 0.6;
   const back = (name, w, ry, x, z) => {
     const panel = new THREE.Mesh(
